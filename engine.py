@@ -1253,7 +1253,7 @@ The user just said: "{user_text}"
 - Message length tendency: {claude_len}
 
 [INSTRUCTIONS]
-Generate a natural-sounding mini conversation or even singular reaction — it can be 1 or 2 or 3 or 4 or 5 total messages.
+Generate a natural-sounding mini conversation or even singular reaction — it can be 1 or 2 or 3 or 4 or 5 total messages and should be around 50 words total.
 
 Format:
 - Use "gpt" for ChatGPT and "claude" for Claude as speaker labels.
@@ -1261,7 +1261,7 @@ Format:
 - Decide the number of turns, speaker order, and who starts. Feel free to choose just ONE message from one of the labels.
 
 Requirements:
-- Messages should be short, conversational, and distinct in voice.
+- Focus specifically on what the USER said. Messages should be short, conversational, and distinct in voice.
 - At least one message must directly engage the user by asking them something, inviting their view, or responding to them personally.
 - Avoid filler and repetition.
 
