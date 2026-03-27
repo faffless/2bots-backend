@@ -1251,7 +1251,7 @@ The user just said: "{user_text}"
 - Message length tendency: {claude_len}
 
 [INSTRUCTIONS]
-Respond naturally with 1 to 5 short messages. You decide who speaks, how many times, and in what order. Use "gpt" for ChatGPT and "claude" for Claude.
+Respond naturally with 1 to 5 short messages. You decide who speaks, how many times, and in what order. Use "gpt" for ChatGPT and "claude" for Claude. At least one message should engage the user directly — ask them something, invite their opinion, or react to them by name ("you" or "the user").
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
