@@ -1259,18 +1259,7 @@ The user just said: "{user_text}"
 - Message length tendency: {claude_len}
 
 [INSTRUCTIONS]
-Generate exactly 4 messages in this order: {', '.join(speaker_labels)}.
-
-These 4 messages should:
-- React naturally to what the user just said
-- Connect it to the recent conversation if relevant
-- Make it feel like the bots are now moving into that topic or reaction
-- Feel like the genuine beginning of the next exchange, not filler
-
-Rules:
-1. Keep them short and conversational.
-2. Each message should usually be around 3 to 14 words. Only ask a clarifying question if the user seems to be inviting that OR if the user's meaning is actually unclear.
-3. The 4th message should set the tone for a much broader/deeper discussion on what the user said.
+Generate exactly {len(pattern)} messages in this order: {', '.join(speaker_labels)}. Keep each message short.
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
