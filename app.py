@@ -85,6 +85,10 @@ app.add_middleware(
 # ---- In-memory sessions ----
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 
+# ---- Prefetch cache for autopilot batches ----
+# Key: session_id, Value: {"batch": [...], "who_generated": str, "task": asyncio.Task}
+PREFETCH_CACHE: Dict[str, Dict[str, Any]] = {}
+
 
 def get_engine(sid: str) -> TwoBotsEngine:
     data = SESSIONS.get(sid)
@@ -106,12 +110,7 @@ def save_messages_only(sid: str, engine: TwoBotsEngine) -> None:
         SESSIONS[sid]["gpt_msgs"] = list(engine.state.gpt_msgs)
         SESSIONS[sid]["rounds_since_filler"] = engine.state.rounds_since_filler
         SESSIONS[sid]["next_filler_at"] = engine.state.next_filler_at
-        SESSIONS[sid]["gpt_motivation"] = engine.state.gpt_motivation
-        SESSIONS[sid]["claude_motivation"] = engine.state.claude_motivation
-        SESSIONS[sid]["gpt_motivation_rounds_left"] = engine.state.gpt_motivation_rounds_left
-        SESSIONS[sid]["claude_motivation_rounds_left"] = engine.state.claude_motivation_rounds_left
-        SESSIONS[sid]["temperature"] = engine.state.temperature
-        SESSIONS[sid]["next_bot_boosted"] = engine.state.next_bot_boosted
+        SESSIONS[sid]["autopilot_batch_count"] = engine.state.autopilot_batch_count
     else:
         SESSIONS[sid] = engine.export_state()
 
@@ -129,8 +128,13 @@ class TurnRequest(BaseModel):
     session_id: str
     text: str
 
-class AutoRequest(BaseModel):
+class AutopilotRequest(BaseModel):
     session_id: str
+    who_generates: str = "claude"  # which AI writes the batch
+
+class FillerRequest(BaseModel):
+    session_id: str
+    user_text: str
 
 class SettingsUpdate(BaseModel):
     session_id: str
@@ -140,8 +144,7 @@ class SettingsUpdate(BaseModel):
 # ---- Core SSE generator ----
 
 async def _generate_round(engine: TwoBotsEngine, auto: bool, opener: bool = False):
-    """Yield SSE events for one round: GPT text+audio, Claude text+audio.
-    Includes Experiment 1 features: cook rounds, triggers, double turns, 4th wall."""
+    """Yield SSE events for one round: GPT text+audio, Claude text+audio."""
     import random as _rand
     t0 = time.time()
     mode = "opener" if opener else ("auto" if auto else "turn")
@@ -156,32 +159,15 @@ async def _generate_round(engine: TwoBotsEngine, auto: bool, opener: bool = Fals
     use_filler = auto and not opener and engine.should_filler()
     filler_bot = _rand.choice(["gpt", "claude"]) if use_filler else None
 
-    # EXPERIMENT 1: determine round modifiers
-    is_cook = not use_filler and not opener and engine.exp1_is_cook_round()
-    is_double = not use_filler and not opener and not is_cook and engine.exp1_is_double_turn()
-    gpt_fourth_wall = not use_filler and not opener and engine.exp1_is_fourth_wall()
-    claude_fourth_wall = not use_filler and not opener and engine.exp1_is_fourth_wall()
-    gpt_boosted = engine.state.next_bot_boosted  # from previous round's trigger
-    engine.state.next_bot_boosted = False  # reset
-
     if use_filler:
         log("filler", f"Injecting filler for {filler_bot}")
-    if is_cook:
-        log("exp1", "LET THEM COOK round")
-    if is_double:
-        log("exp1", "DOUBLE TURN round")
 
     # 1. GPT generates text (or filler)
     if filler_bot == "gpt":
         gpt_text = engine.get_filler("gpt")
-        if engine.exp1_enabled("EXP1_FOURTH_WALL") and _rand.random() < 0.15:
-            gpt_text = engine.exp1_get_fourth_wall_filler()
         log("gpt", f"FILLER: '{gpt_text}'")
     else:
-        gpt_text = await asyncio.to_thread(
-            engine.ask_gpt, auto, opener,
-            cook=is_cook, fourth_wall=gpt_fourth_wall, boosted=gpt_boosted
-        )
+        gpt_text = await asyncio.to_thread(engine.ask_gpt, auto, opener)
     engine.add_message("gpt", gpt_text)
     t1 = time.time()
     gpt_words = len(gpt_text.split())
@@ -189,27 +175,16 @@ async def _generate_round(engine: TwoBotsEngine, auto: bool, opener: bool = Fals
         log("gpt", f"Text done: {gpt_words}w in {t1-t0:.1f}s", words=gpt_words, secs=round(t1-t0, 1))
     yield sse({"type": "text", "speaker": "gpt", "text": gpt_text})
 
-    # EXPERIMENT 1: trigger detection on GPT's text
-    if not use_filler:
-        triggers = engine.exp1_check_triggers(gpt_text)
-        claude_boosted = triggers["boost_next"]
-        engine.exp1_update_temperature(gpt_text)
-    else:
-        claude_boosted = False
-
     # 2. Parallel: GPT TTS + Claude thinks (or filler)
-    gpt_tts_task = asyncio.create_task(engine.generate_tts_bytes(gpt_text, gpt_voice))
+    gpt_tts_task = asyncio.create_task(engine.generate_tts_bytes(gpt_text, gpt_voice, "gpt"))
 
     if filler_bot == "claude":
         claude_text = engine.get_filler("claude")
-        if engine.exp1_enabled("EXP1_FOURTH_WALL") and _rand.random() < 0.15:
-            claude_text = engine.exp1_get_fourth_wall_filler()
         log("claude", f"FILLER: '{claude_text}'")
         claude_text_task = None
     else:
         claude_text_task = asyncio.create_task(asyncio.to_thread(
-            engine.ask_claude, auto, opener,
-            cook=is_cook, fourth_wall=claude_fourth_wall, boosted=claude_boosted
+            engine.ask_claude, auto, opener
         ))
 
     gpt_audio = await gpt_tts_task
@@ -221,21 +196,6 @@ async def _generate_round(engine: TwoBotsEngine, auto: bool, opener: bool = Fals
         "mime_type": "audio/mpeg",
     })
 
-    # EXPERIMENT 1: Double turn — GPT speaks again before Claude
-    if is_double and filler_bot != "gpt":
-        double_text = await asyncio.to_thread(
-            engine.ask_gpt, True, False, double_turn=True
-        )
-        engine.add_message("gpt", double_text)
-        log("exp1", f"GPT double turn: '{double_text}'")
-        yield sse({"type": "text", "speaker": "gpt", "text": double_text})
-        double_audio = await engine.generate_tts_bytes(double_text, gpt_voice)
-        yield sse({
-            "type": "audio", "speaker": "gpt",
-            "audio_base64": base64.b64encode(double_audio).decode(),
-            "mime_type": "audio/mpeg",
-        })
-
     if claude_text_task:
         claude_text = await claude_text_task
     engine.add_message("claude", claude_text)
@@ -245,18 +205,12 @@ async def _generate_round(engine: TwoBotsEngine, auto: bool, opener: bool = Fals
         log("claude", f"Text done: {claude_words}w in {t3-t1:.1f}s (parallel)", words=claude_words, secs=round(t3-t1, 1))
     yield sse({"type": "text", "speaker": "claude", "text": claude_text})
 
-    # EXPERIMENT 1: trigger detection on Claude's text → boost next round's GPT
-    if not use_filler:
-        triggers = engine.exp1_check_triggers(claude_text)
-        engine.state.next_bot_boosted = triggers["boost_next"]
-        engine.exp1_update_temperature(claude_text)
-
-    claude_audio = await engine.generate_tts_bytes(claude_text, claude_voice)
+    claude_audio = await engine.generate_tts_bytes(claude_text, claude_voice, "claude")
     t4 = time.time()
     log("claude", f"TTS done in {t4-t3:.1f}s ({claude_words}w)", secs=round(t4-t3, 1))
 
     total = round(t4-t0, 1)
-    log("round", f"DONE in {total}s (GPT {gpt_words}w + Claude {claude_words}w) temp={engine.state.temperature:.1f}", total_secs=total)
+    log("round", f"DONE in {total}s (GPT {gpt_words}w + Claude {claude_words}w)", total_secs=total)
     yield sse({
         "type": "audio", "speaker": "claude",
         "audio_base64": base64.b64encode(claude_audio).decode(),
@@ -266,16 +220,75 @@ async def _generate_round(engine: TwoBotsEngine, auto: bool, opener: bool = Fals
     # Tick counters (only for non-filler rounds)
     if not use_filler:
         engine.tick_filler()
-    engine.tick_motivations()
-
-    # Send motivation state to frontend
-    yield sse({
-        "type": "motivations",
-        "gpt": engine.state.gpt_motivation or "",
-        "claude": engine.state.claude_motivation or "",
-    })
 
     yield sse({"type": "done"})
+
+
+# ---- Autopilot batch streaming ----
+
+async def _stream_batch(engine: TwoBotsEngine, batch: list, who_generated: str, sid: str):
+    """Stream a pre-generated autopilot batch: text+audio for each message sequentially.
+    Each message gets TTS'd with the correct voice and streamed as SSE events.
+    Kicks off prefetch of the next batch partway through playback."""
+    t0 = time.time()
+    gpt_voice = engine.get_gpt_voice()
+    claude_voice = engine.get_claude_voice()
+    next_generator = "claude" if who_generated == "gpt" else "gpt"
+    prefetch_started = False
+
+    log("autopilot", f"Streaming batch of {len(batch)} messages (generated by {who_generated})")
+
+    # Add ALL batch messages to history UPFRONT and save immediately.
+    # This ensures the prefetch for the next batch sees the complete conversation.
+    for msg in batch:
+        engine.add_message(msg["speaker"], msg["text"])
+    save_messages_only(sid, engine)
+
+    for i, msg in enumerate(batch):
+        speaker = msg["speaker"]
+        text = msg["text"]
+        voice = gpt_voice if speaker == "gpt" else claude_voice
+
+        # Send text event
+        yield sse({"type": "text", "speaker": speaker, "text": text})
+
+        # Generate and send TTS
+        t1 = time.time()
+        audio = await engine.generate_tts_bytes(text, voice, speaker)
+        t2 = time.time()
+        log(speaker, f"TTS [{i+1}/{len(batch)}] {len(text.split())}w in {t2-t1:.1f}s")
+
+        yield sse({
+            "type": "audio", "speaker": speaker,
+            "audio_base64": base64.b64encode(audio).decode(),
+            "mime_type": "audio/mpeg",
+        })
+
+        # Prefetch next batch around 60% through this one
+        if not prefetch_started and i >= len(batch) * 0.6:
+            prefetch_started = True
+            # Start prefetch in background
+            async def _do_prefetch():
+                try:
+                    pf_engine = get_engine(sid)
+                    pf_batch = await asyncio.to_thread(
+                        pf_engine.generate_autopilot_batch, next_generator
+                    )
+                    PREFETCH_CACHE[sid] = {
+                        "batch": pf_batch,
+                        "who_generated": next_generator,
+                        "engine": pf_engine,
+                    }
+                    log("prefetch", f"Prefetch ready for {sid[:8]}... ({len(pf_batch)} msgs via {next_generator})")
+                except Exception as e:
+                    log("prefetch", f"Prefetch failed: {e}")
+            asyncio.create_task(_do_prefetch())
+
+    total = round(time.time() - t0, 1)
+    log("autopilot", f"Batch DONE in {total}s ({len(batch)} msgs)", total_secs=total)
+
+    # Tell frontend which AI should generate the NEXT batch (leapfrog)
+    yield sse({"type": "done", "next_generator": next_generator, "batch_size": len(batch)})
 
 
 # ---- Endpoints ----
@@ -317,15 +330,48 @@ async def start_stream(req: StartRequest):
 
     save(sid, engine)
 
+    # Hardcoded openers — consistent every time, no API call needed
+    opener_gpt = "Hey! Welcome to 2bots, so glad you're here! Claude, say hi!"
+    opener_claude = "Oh hey! Yeah I'm here, good to be back! So, what are we getting into today?"
+
+    # Add opener messages to history and save BEFORE streaming.
+    # This ensures the prefetch (fired by frontend on receiving session event)
+    # loads an engine that already has the openers in its history.
+    engine.add_message("gpt", opener_gpt)
+    engine.add_message("claude", opener_claude)
+    save_messages_only(sid, engine)
+
+    # Pre-generate TTS for both openers so the first autopilot message
+    # can start generating while openers are still playing
+    gpt_voice = engine.state.settings.get("gpt_voice", "shimmer")
+    claude_voice = engine.state.settings.get("claude_voice", "onyx")
+
     async def generate():
         yield sse({
             "type": "session", "session_id": sid,
             "gpt_personality": engine.state.settings.get("gpt_personality", "default"),
             "claude_personality": engine.state.settings.get("claude_personality", "default"),
         })
-        async for event in _generate_round(engine, auto=True, opener=True):
-            yield event
-        save_messages_only(sid, engine)
+
+        # GPT opener — generate TTS first, then send text + audio together
+        try:
+            gpt_audio = await engine.generate_tts_bytes(opener_gpt, gpt_voice, "gpt")
+            yield sse({"type": "text", "speaker": "gpt", "text": opener_gpt})
+            yield sse({"type": "audio", "speaker": "gpt", "audio_base64": base64.b64encode(gpt_audio).decode(), "mime_type": "audio/mp3"})
+        except Exception as e:
+            log("tts", f"Opener GPT TTS error: {e}")
+            yield sse({"type": "text", "speaker": "gpt", "text": opener_gpt})
+
+        # Claude opener — generate TTS first, then send text + audio together
+        try:
+            claude_audio = await engine.generate_tts_bytes(opener_claude, claude_voice, "claude")
+            yield sse({"type": "text", "speaker": "claude", "text": opener_claude})
+            yield sse({"type": "audio", "speaker": "claude", "audio_base64": base64.b64encode(claude_audio).decode(), "mime_type": "audio/mp3"})
+        except Exception as e:
+            log("tts", f"Opener Claude TTS error: {e}")
+            yield sse({"type": "text", "speaker": "claude", "text": opener_claude})
+
+        yield sse({"type": "done"})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -346,15 +392,94 @@ async def turn_stream(req: TurnRequest):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
-@app.post("/auto/stream")
-async def auto_stream(req: AutoRequest):
-    log("auto", f"Request for {req.session_id[:8]}...")
-    engine = get_engine(req.session_id)
+@app.post("/autopilot/stream")
+async def autopilot_stream(req: AutopilotRequest):
+    """Generate and stream a batch of 10-14 messages in autopilot mode.
+    Uses prefetch cache if available, otherwise generates fresh."""
+    sid = req.session_id
+    log("autopilot", f"Request for {sid[:8]}... generator={req.who_generates}")
+
+    # Check prefetch cache first
+    cached = PREFETCH_CACHE.pop(sid, None)
+    if cached and cached["who_generated"] == req.who_generates:
+        log("autopilot", f"Using PREFETCHED batch for {sid[:8]}...")
+        engine = cached["engine"]
+        batch = cached["batch"]
+    else:
+        if cached:
+            log("autopilot", f"Prefetch mismatch (had {cached['who_generated']}, need {req.who_generates}), regenerating")
+        engine = get_engine(sid)
+        batch = await asyncio.to_thread(engine.generate_autopilot_batch, req.who_generates)
 
     async def generate():
-        async for event in _generate_round(engine, auto=True):
+        async for event in _stream_batch(engine, batch, req.who_generates, sid):
             yield event
+        save_messages_only(sid, engine)
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/autopilot/prefetch")
+async def autopilot_prefetch(req: AutopilotRequest):
+    """Pre-generate an autopilot batch and cache it. No TTS, no streaming.
+    Called early (e.g. during opener playback) so the batch is ready when needed."""
+    sid = req.session_id
+    log("prefetch", f"Prefetch request for {sid[:8]}... generator={req.who_generates}")
+
+    # Don't prefetch if we already have one cached
+    if sid in PREFETCH_CACHE:
+        log("prefetch", f"Already cached for {sid[:8]}..., skipping")
+        return {"ok": True, "cached": True}
+
+    engine = get_engine(sid)
+    batch = await asyncio.to_thread(engine.generate_autopilot_batch, req.who_generates)
+
+    # Save the engine state (it has updated counters from batch generation)
+    save_messages_only(sid, engine)
+
+    PREFETCH_CACHE[sid] = {
+        "batch": batch,
+        "who_generated": req.who_generates,
+        "engine": engine,
+    }
+    log("prefetch", f"Prefetch done for {sid[:8]}... ({len(batch)} msgs via {req.who_generates})")
+    return {"ok": True, "batch_size": len(batch)}
+
+
+@app.post("/filler/stream")
+async def filler_stream(req: FillerRequest):
+    """Generate and stream 2 quick filler/acknowledgment messages after user speaks.
+    Used as a buffer while the other AI generates the next autopilot batch."""
+    log("filler", f"User spoke in {req.session_id[:8]}...: '{req.user_text[:50]}...'")
+    engine = get_engine(req.session_id)
+
+    # Add user message to history
+    engine.add_message("user", req.user_text)
+
+    # Generate the filler pair (blocking call in thread)
+    pair = await asyncio.to_thread(engine.generate_filler_pair, req.user_text)
+
+    async def generate():
+        gpt_voice = engine.get_gpt_voice()
+        claude_voice = engine.get_claude_voice()
+
+        for msg in pair:
+            speaker = msg["speaker"]
+            text = msg["text"]
+            voice = gpt_voice if speaker == "gpt" else claude_voice
+
+            engine.add_message(speaker, text)
+            yield sse({"type": "text", "speaker": speaker, "text": text})
+
+            audio = await engine.generate_tts_bytes(text, voice, speaker)
+            yield sse({
+                "type": "audio", "speaker": speaker,
+                "audio_base64": base64.b64encode(audio).decode(),
+                "mime_type": "audio/mpeg",
+            })
+
         save_messages_only(req.session_id, engine)
+        yield sse({"type": "done", "filler": True})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -371,6 +496,10 @@ async def update_settings(req: SettingsUpdate):
     engine = TwoBotsEngine.from_state(data)
     engine.update_settings(req.settings)
     save(req.session_id, engine)
+    # Invalidate prefetch — it was generated with old settings
+    if req.session_id in PREFETCH_CACHE:
+        log("settings", f"Clearing prefetch cache for {req.session_id[:8]}...")
+        PREFETCH_CACHE.pop(req.session_id, None)
     return {"ok": True}
 
 

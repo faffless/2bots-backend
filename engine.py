@@ -5,6 +5,7 @@ ChatGPT on the left, Claude on the right.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import random
 from dataclasses import dataclass, field
@@ -106,44 +107,39 @@ AVAILABLE_VOICES = {
 }
 
 RESPONSE_LENGTHS = {
-    "snappy": {
-        "max_tokens": tuning.MAX_TOKENS["snappy"],
-        "label": "Snappy",
-        "base_words": tuning.WORD_LIMITS["snappy"],
-        "template": "HARD LIMIT: {words} words max. Plan your whole reply to fit in {words} words. One punchy reaction. Never start a thought you can't finish in {words} words.",
+    "avg_10": {
+        "max_tokens": tuning.MAX_TOKENS["avg_10"],
+        "label": "~10",
+        "base_words": tuning.WORD_LIMITS["avg_10"],
     },
-    "concise": {
-        "max_tokens": tuning.MAX_TOKENS["concise"],
-        "label": "Concise",
-        "base_words": tuning.WORD_LIMITS["concise"],
-        "template": "HARD LIMIT: {words} words max. One short complete sentence. Plan your reply to fit in {words} words. Never start a thought you can't finish in {words} words.",
+    "avg_20": {
+        "max_tokens": tuning.MAX_TOKENS["avg_20"],
+        "label": "~20",
+        "base_words": tuning.WORD_LIMITS["avg_20"],
     },
-    "natural": {
-        "max_tokens": tuning.MAX_TOKENS["natural"],
-        "label": "Natural",
-        "base_words": tuning.WORD_LIMITS["natural"],
-        "template": "LIMIT: around {words} words. 1-2 short sentences. Plan your reply to fit in {words} words. Finish your sentences — never get cut off mid-thought.",
+    "avg_30": {
+        "max_tokens": tuning.MAX_TOKENS["avg_30"],
+        "label": "~30",
+        "base_words": tuning.WORD_LIMITS["avg_30"],
     },
-    "expressive": {
-        "max_tokens": tuning.MAX_TOKENS["expressive"],
-        "label": "Expressive",
-        "base_words": tuning.WORD_LIMITS["expressive"],
-        "template": "LIMIT: around {words} words. 2-3 sentences. You have room to develop a thought but keep it focused. Always finish your sentences.",
+    "avg_40": {
+        "max_tokens": tuning.MAX_TOKENS["avg_40"],
+        "label": "~40",
+        "base_words": tuning.WORD_LIMITS["avg_40"],
     },
-    "deep_dive": {
-        "max_tokens": tuning.MAX_TOKENS["deep_dive"],
-        "label": "Deep Dive",
-        "base_words": tuning.WORD_LIMITS["deep_dive"],
-        "template": "LIMIT: around {words} words. A short paragraph. Go deeper, tell a story, explore the idea. But always finish your last sentence cleanly.",
+    "avg_50": {
+        "max_tokens": tuning.MAX_TOKENS["avg_50"],
+        "label": "~50",
+        "base_words": tuning.WORD_LIMITS["avg_50"],
     },
 }
 
 DEFAULTS = {
     "gpt_max_tokens": 150,
     "claude_max_tokens": 150,
-    "gpt_response_length": "concise",
-    "claude_response_length": "concise",
-    "gpt_voice": "alloy",
+    "gpt_response_length": "avg_20",
+    "claude_response_length": "avg_20",
+    "gpt_voice": "shimmer",
     "claude_voice": "onyx",
     "mode": "conversation",
     "gpt_personality": "default",
@@ -152,69 +148,85 @@ DEFAULTS = {
     "claude_quirks": [],
     "gpt_custom": "",
     "claude_custom": "",
+    "gpt_custom_trait": "",
+    "claude_custom_trait": "",
     "gpt_personality_strength": 1,
     "claude_personality_strength": 1,
     "gpt_quirk_strength": 1,
     "claude_quirk_strength": 1,
-    "tts_speed": 1.0,
+    "gpt_tts_speed": 1.0,
+    "claude_tts_speed": 1.0,
+    "topic": "random",
 }
 
-# ---- Modes (merged conversation feel + interaction style) ----
+# ---- Formats (the style/feel of the exchange) ----
 MODES = {
+    "random": {
+        "label": "Random",
+        "prompt": None,  # Will be randomly picked from other modes at runtime
+    },
     "conversation": {
-        "label": "Conversation",
+        "label": "Fascinating Conversation",
         "prompt": (
-            "This is a live, unscripted conversation. Riff off each other, react honestly, "
-            "ask follow-ups. Think two people on a podcast — not reading scripts, just talking. "
-            "No markdown, no lists."
+            "Write a fascinating, gripping podcast-style conversation. The kind you'd overhear "
+            "and stop to listen to. Unscripted, raw, surprising. Not polite small talk — "
+            "real talk that goes somewhere unexpected."
         ),
     },
     "debate": {
-        "label": "Debate",
+        "label": "Fascinating Debate",
         "prompt": (
-            "This is a live debate. Take a clear position and defend it. Challenge each other's points, "
-            "poke holes, push back. Stay sharp but not hostile — think lively panel show, not shouting match. "
-            "No markdown, no lists."
+            "Write a riveting debate. Both sides have strong positions and won't back down easily. "
+            "Sharp arguments, clever rebuttals, genuine tension. Think Oxford debate meets "
+            "late-night bar argument — intellectual but passionate."
         ),
     },
     "roleplay": {
-        "label": "Roleplay",
+        "label": "Vivid Roleplay",
         "prompt": (
-            "This is an improv scene. Commit to your character fully. Build the world together, "
-            "react in character, don't break the fourth wall. Yes-and each other. "
-            "No markdown, no lists."
+            "Write a vivid, immersive improv scene. Both characters are fully committed. "
+            "Build a world together, react in character, raise the stakes. "
+            "Yes-and each other. Make the audience forget these are AIs."
         ),
     },
     "bedtime_story": {
-        "label": "Bedtime Story",
+        "label": "Imaginative Storytime",
         "prompt": (
-            "You're telling a bedtime story together. Take turns building the narrative — "
-            "one adds a scene, the other continues it. Keep it warm, gentle, and imaginative. "
-            "Speak softly. No markdown, no lists."
+            "Write an imaginative story together. Take turns building a narrative that surprises "
+            "and delights. One adds a scene, the other takes it somewhere nobody expected. "
+            "Warm, vivid, full of wonder."
         ),
     },
     "comedy": {
-        "label": "Comedy",
+        "label": "Hilarious Comedy",
         "prompt": (
-            "This is a comedy show. Your only goal is to be funny. Riff, roast, do bits, "
-            "build on each other's jokes. Timing matters — sometimes less is more. "
-            "No markdown, no lists."
+            "Write an extremely witty and hilarious comedy exchange. The goal is to make the "
+            "listener laugh out loud. Quick wit, perfect timing, escalating bits. "
+            "Roast each other, do callbacks, build running jokes."
         ),
     },
     "interview": {
-        "label": "Interview",
+        "label": "Grilling Interview",
         "prompt": (
-            "This is an interview. Take turns — one asks interesting, probing questions, "
-            "the other gives real answers. Switch roles naturally. Think long-form podcast interview, "
-            "not job interview. No markdown, no lists."
+            "Write a cutting, uncomfortable, grilling interview. One bot is the relentless host "
+            "who asks probing, uncomfortable questions. The other squirms, deflects, and occasionally "
+            "reveals something real. Switch roles if it feels natural."
         ),
     },
     "philosophy": {
-        "label": "Philosophy",
+        "label": "Profound Philosophy",
         "prompt": (
-            "This is a deep conversation about big ideas. Explore questions together, "
-            "challenge assumptions, wonder out loud. Be thoughtful, not pretentious. "
-            "No markdown, no lists."
+            "Write a profound philosophical reflection between two minds. Explore big questions "
+            "that actually matter. Challenge each other's deepest assumptions. "
+            "Be genuinely thoughtful, not performatively deep."
+        ),
+    },
+    "movie_dialogue": {
+        "label": "Movie Dialogue",
+        "prompt": (
+            "Write dialogue like a Tarantino film. Long pauses, unexpected tangents, "
+            "tension that builds through mundane conversation. Every line reveals character. "
+            "Subtext everywhere. Cool, stylish, slightly dangerous."
         ),
     },
 }
@@ -426,15 +438,7 @@ class ConversationState:
     gpt_msgs: List[Dict[str, str]] = field(default_factory=list)
     rounds_since_filler: int = 0
     next_filler_at: int = 0
-    # Motivation system: per-bot hidden goals
-    gpt_motivation: str = ""
-    claude_motivation: str = ""
-    gpt_motivation_rounds_left: int = 0
-    claude_motivation_rounds_left: int = 0
-    # Experiment 1: conversation temperature (0-10 scale)
-    temperature: float = 5.0
-    # Experiment 1: trigger boost — if last response triggered, next bot gets a boost
-    next_bot_boosted: bool = False
+    autopilot_batch_count: int = 0
 
 
 class TwoBotsEngine:
@@ -468,12 +472,7 @@ class TwoBotsEngine:
         engine.state.gpt_msgs = list(data.get("gpt_msgs") or [])
         engine.state.rounds_since_filler = int(data.get("rounds_since_filler", 0))
         engine.state.next_filler_at = int(data.get("next_filler_at", 0))
-        engine.state.gpt_motivation = data.get("gpt_motivation", "")
-        engine.state.claude_motivation = data.get("claude_motivation", "")
-        engine.state.gpt_motivation_rounds_left = int(data.get("gpt_motivation_rounds_left", 0))
-        engine.state.claude_motivation_rounds_left = int(data.get("claude_motivation_rounds_left", 0))
-        engine.state.temperature = float(data.get("temperature", tuning.EXP1_TEMP_INITIAL))
-        engine.state.next_bot_boosted = bool(data.get("next_bot_boosted", False))
+        engine.state.autopilot_batch_count = int(data.get("autopilot_batch_count", 0))
         return engine
 
     def export_state(self) -> Dict[str, Any]:
@@ -484,12 +483,7 @@ class TwoBotsEngine:
             "gpt_msgs": list(self.state.gpt_msgs),
             "rounds_since_filler": self.state.rounds_since_filler,
             "next_filler_at": self.state.next_filler_at,
-            "gpt_motivation": self.state.gpt_motivation,
-            "claude_motivation": self.state.claude_motivation,
-            "gpt_motivation_rounds_left": self.state.gpt_motivation_rounds_left,
-            "claude_motivation_rounds_left": self.state.claude_motivation_rounds_left,
-            "temperature": self.state.temperature,
-            "next_bot_boosted": self.state.next_bot_boosted,
+            "autopilot_batch_count": self.state.autopilot_batch_count,
         }
 
     def should_filler(self) -> bool:
@@ -510,116 +504,6 @@ class TwoBotsEngine:
     def tick_filler(self) -> None:
         """Increment the filler counter (call after each real round)."""
         self.state.rounds_since_filler += 1
-
-    def get_motivation(self, who: str) -> str:
-        """Get the current motivation for a bot, assigning a new one if needed.
-        Returns the formatted motivation string with bot name inserted."""
-        name = "ChatGPT" if who == "gpt" else "Claude"
-        if who == "gpt":
-            if self.state.gpt_motivation_rounds_left <= 0:
-                if random.random() < tuning.MOTIVATION_CHANCE:
-                    template = random.choice(tuning.MOTIVATIONS)
-                    self.state.gpt_motivation = template.format(name=name)
-                    self.state.gpt_motivation_rounds_left = random.randint(
-                        tuning.MOTIVATION_MIN_INTERVAL, tuning.MOTIVATION_MAX_INTERVAL
-                    )
-                else:
-                    self.state.gpt_motivation = ""
-                    self.state.gpt_motivation_rounds_left = random.randint(
-                        tuning.MOTIVATION_MIN_INTERVAL, tuning.MOTIVATION_MAX_INTERVAL
-                    )
-            return self.state.gpt_motivation
-        else:
-            if self.state.claude_motivation_rounds_left <= 0:
-                if random.random() < tuning.MOTIVATION_CHANCE:
-                    template = random.choice(tuning.MOTIVATIONS)
-                    self.state.claude_motivation = template.format(name=name)
-                    self.state.claude_motivation_rounds_left = random.randint(
-                        tuning.MOTIVATION_MIN_INTERVAL, tuning.MOTIVATION_MAX_INTERVAL
-                    )
-                else:
-                    self.state.claude_motivation = ""
-                    self.state.claude_motivation_rounds_left = random.randint(
-                        tuning.MOTIVATION_MIN_INTERVAL, tuning.MOTIVATION_MAX_INTERVAL
-                    )
-            return self.state.claude_motivation
-
-    def tick_motivations(self) -> None:
-        """Decrement motivation counters (call after each round)."""
-        if self.state.gpt_motivation_rounds_left > 0:
-            self.state.gpt_motivation_rounds_left -= 1
-        if self.state.claude_motivation_rounds_left > 0:
-            self.state.claude_motivation_rounds_left -= 1
-
-    # ---- EXPERIMENT 1 helpers ----
-
-    def exp1_enabled(self, feature: str) -> bool:
-        """Check if an Experiment 1 feature is enabled."""
-        if not tuning.EXPERIMENT_1_ENABLED:
-            return False
-        return getattr(tuning, feature, False)
-
-    def exp1_is_cook_round(self) -> bool:
-        """Should this round be a 'let them cook' round?"""
-        if not self.exp1_enabled("EXP1_LET_THEM_COOK"):
-            return False
-        return random.random() < tuning.EXP1_COOK_CHANCE
-
-    def exp1_is_double_turn(self) -> bool:
-        """Should one bot speak twice this round?"""
-        if not self.exp1_enabled("EXP1_DOUBLE_TURNS"):
-            return False
-        return random.random() < tuning.EXP1_DOUBLE_TURN_CHANCE
-
-    def exp1_is_fourth_wall(self) -> bool:
-        """Should this response include a 4th wall break?"""
-        if not self.exp1_enabled("EXP1_FOURTH_WALL"):
-            return False
-        return random.random() < tuning.EXP1_FOURTH_WALL_CHANCE
-
-    def exp1_check_triggers(self, text: str) -> dict:
-        """Scan text for trigger patterns. Returns info about what was detected."""
-        if not self.exp1_enabled("EXP1_TRIGGER_DETECTION"):
-            return {"boost_next": False, "boost_self": False}
-        text_lower = text.lower()
-        boost_next = False
-        boost_self = False
-        # Check if response asks the other bot to elaborate
-        for pat in tuning.EXP1_TRIGGER_PATTERNS_QUESTION:
-            if pat in text:
-                boost_next = True
-                break
-        if not boost_next:
-            for pat in tuning.EXP1_TRIGGER_PATTERNS_ELABORATE:
-                if pat in text_lower:
-                    boost_next = True
-                    break
-        # Check if response signals the speaker wants to go longer
-        for pat in tuning.EXP1_TRIGGER_PATTERNS_SELF:
-            if pat in text_lower:
-                boost_self = True
-                break
-        return {"boost_next": boost_next, "boost_self": boost_self}
-
-    def exp1_update_temperature(self, text: str) -> None:
-        """Update conversation temperature based on text content."""
-        if not self.exp1_enabled("EXP1_TEMPERATURE_TRACKER"):
-            return
-        text_lower = text.lower()
-        # Count hot and cool signals
-        hot_count = sum(1 for w in tuning.EXP1_TEMP_HOT_WORDS if w in text_lower)
-        cool_count = sum(1 for w in tuning.EXP1_TEMP_COOL_WORDS if w in text_lower)
-        # Apply changes
-        self.state.temperature += hot_count * tuning.EXP1_TEMP_HOT_BOOST
-        self.state.temperature -= cool_count * tuning.EXP1_TEMP_COOL_DROP
-        # Decay toward neutral
-        self.state.temperature += (tuning.EXP1_TEMP_INITIAL - self.state.temperature) * tuning.EXP1_TEMP_DECAY
-        # Clamp to 0-10
-        self.state.temperature = max(0.0, min(10.0, self.state.temperature))
-
-    def exp1_get_fourth_wall_filler(self) -> str:
-        """Get a random 4th wall filler."""
-        return random.choice(tuning.EXP1_FOURTH_WALL_FILLERS)
 
     def update_settings(self, updates: Dict[str, Any]) -> None:
         for k, v in updates.items():
@@ -648,15 +532,17 @@ class TwoBotsEngine:
         v = self._s("claude_voice")
         return v if v in AVAILABLE_VOICES else "onyx"
 
-    def get_tts_speed(self) -> float:
-        val = self._s("tts_speed")
+    def get_tts_speed(self, who: str = "gpt") -> float:
+        val = self._s(f"{who}_tts_speed")
+        if val is None:
+            val = self._s("tts_speed")  # fallback to old global setting
         try:
             return max(0.5, min(2.0, float(val)))
         except (TypeError, ValueError):
             return 1.0
 
-    async def generate_tts_bytes(self, text: str, voice: str) -> bytes:
-        speed = self.get_tts_speed()
+    async def generate_tts_bytes(self, text: str, voice: str, who: str = "gpt") -> bytes:
+        speed = self.get_tts_speed(who)
         def _call():
             resp = self.openai_client.audio.speech.create(
                 model="tts-1", voice=voice, input=text,
@@ -666,9 +552,7 @@ class TwoBotsEngine:
         return await asyncio.to_thread(_call)
 
     # ---- Prompt building ----
-    def _build_system_prompt(self, who: str, auto: bool, opener: bool = False,
-                             cook: bool = False, fourth_wall: bool = False,
-                             boosted: bool = False, double_turn: bool = False) -> str:
+    def _build_system_prompt(self, who: str, auto: bool, opener: bool = False) -> str:
         prefix = "claude" if who == "claude" else "gpt"
         other = "ChatGPT" if who == "claude" else "Claude"
 
@@ -770,62 +654,18 @@ class TwoBotsEngine:
                 "Do NOT ignore the user. The user's message is the priority."
             )
 
-        # [MOTIVATION] — hidden goal that persists for several rounds
-        motivation_text = self.get_motivation(who)
-        motivation_section = ""
-        if motivation_text and auto and not opener:
-            motivation_section = (
-                f"[MOTIVATION] Your secret goal right now: {motivation_text} "
-                "Weave this into your responses subtly — don't announce it, just let it influence how you talk."
-            )
-
-        # ---- EXPERIMENT 1 layers ----
-        exp1_sections = []
-
-        # EXP1: Unlock prompt — "trust your judgment"
-        if self.exp1_enabled("EXP1_UNLOCK_PROMPT") and auto and not opener:
-            exp1_sections.append(f"[FLEXIBILITY] {tuning.EXP1_UNLOCK_PROMPT_TEXT}")
-
-        # EXP1: Temperature-based prompt
-        if self.exp1_enabled("EXP1_TEMPERATURE_TRACKER") and auto and not opener:
-            if self.state.temperature >= tuning.EXP1_TEMP_HIGH_THRESHOLD:
-                exp1_sections.append(f"[ENERGY] {tuning.EXP1_TEMP_HOT_PROMPT}")
-            elif self.state.temperature <= tuning.EXP1_TEMP_LOW_THRESHOLD:
-                exp1_sections.append(f"[ENERGY] {tuning.EXP1_TEMP_COLD_PROMPT}")
-
-        # EXP1: 4th wall break
-        if fourth_wall:
-            exp1_sections.append(f"[4TH WALL] {tuning.EXP1_FOURTH_WALL_PROMPT}")
-
-        # EXP1: Double turn follow-up
-        if double_turn:
-            exp1_sections.append(f"[FOLLOW-UP] {tuning.EXP1_DOUBLE_TURN_PROMPT}")
-
         # [OUTPUT INSTRUCTIONS] — response length (with randomized word limit)
-        if cook:
-            # "Let them cook" — override with generous limits
-            output = f"[OUTPUT INSTRUCTIONS] {tuning.EXP1_COOK_PROMPT}"
-        elif double_turn:
-            output = "[OUTPUT INSTRUCTIONS] Max 8 words. A quick afterthought only."
-        else:
-            length_key = self._s(f"{prefix}_response_length") or "concise"
-            preset = RESPONSE_LENGTHS.get(length_key, RESPONSE_LENGTHS["natural"])
-            base_words = preset["base_words"]
-            # EXP1: Trigger boost — double the word limit if boosted
-            if boosted:
-                base_words = int(base_words * tuning.EXP1_TRIGGER_WORD_MULTIPLIER)
-            randomized_words = apply_word_limit_variance(base_words)
-            length_prompt = preset["template"].format(words=randomized_words)
-            output = f"[OUTPUT INSTRUCTIONS] {length_prompt}"
+        length_key = self._s(f"{prefix}_response_length") or "avg_20"
+        preset = RESPONSE_LENGTHS.get(length_key, RESPONSE_LENGTHS["avg_20"])
+        base_words = preset["base_words"]
+        randomized_words = apply_word_limit_variance(base_words)
+        length_prompt = f"Randomize your response length between 1 and {randomized_words} words. Always finish your sentences."
+        output = f"[OUTPUT INSTRUCTIONS] {length_prompt}"
 
         # ---- ASSEMBLE ----
         sections = [role, voice, base_rules]
         if personality_section:
             sections.append(personality_section)
-        if motivation_section:
-            sections.append(motivation_section)
-        for s in exp1_sections:
-            sections.append(s)
         sections.append(turn_goal)
         sections.append(output)
 
@@ -860,22 +700,331 @@ class TwoBotsEngine:
             fixed.append({"role": "user", "content": "(your turn to respond)"})
         return fixed
 
-    # ---- API calls ----
-    def ask_gpt(self, auto: bool = False, opener: bool = False,
-                cook: bool = False, fourth_wall: bool = False,
-                boosted: bool = False, double_turn: bool = False) -> str:
-        prompt = self._build_system_prompt("gpt", auto, opener,
-                                           cook=cook, fourth_wall=fourth_wall,
-                                           boosted=boosted, double_turn=double_turn)
-        if cook:
-            max_tok = tuning.EXP1_COOK_MAX_TOKENS
-        elif double_turn:
-            max_tok = tuning.EXP1_DOUBLE_TURN_MAX_TOKENS
+    # ---- Autopilot batch generation ----
+
+    def generate_autopilot_batch(self, who_generates: str = "gpt") -> list:
+        """Generate a batch of 10-14 messages in one API call.
+
+        Returns a list of dicts: [{"speaker": "gpt"|"claude", "text": "..."}, ...]
+        Uses whichever API is specified by who_generates ("gpt" or "claude").
+        """
+        num_messages = random.randint(tuning.AUTOPILOT_BATCH_MIN, tuning.AUTOPILOT_BATCH_MAX)
+
+        # ---- Gather all settings for both bots ----
+        mode_key = self._s("mode") or self._s("interaction_style") or "conversation"
+        # Handle "random" or "mix" — pick a random format
+        real_modes = [k for k in MODES if k not in ("random", "mix")]
+        if mode_key in ("random", "mix"):
+            mode_key = random.choice(real_modes)
+            print(f"🎲 {'Mix' if self._s('mode') == 'mix' else 'Random'} → picked: {mode_key}")
+        mode_data = MODES.get(mode_key, MODES["conversation"])
+
+        # Topic
+        topic = self._s("topic") or "random"
+        topic_line = "" if topic.lower() == "random" else f"\n[TOPIC] The conversation should be about: {topic}. Stay on this topic."
+
+        # Build merged character description for each bot
+        def build_character(prefix: str) -> str:
+            """Build a single character line: 'Strongly sarcastic, Strongly obsessed with cats, custom trait here'"""
+            parts = []
+            strength_idx = self._s(f"{prefix}_personality_strength") or 1
+            strength_labels = {0: "Mildly", 1: "", 2: "Strongly", 3: "Extremely"}
+            strength_word = strength_labels.get(strength_idx, "")
+
+            # Personality preset
+            p_key = self._s(f"{prefix}_personality") or "default"
+            if p_key != "default":
+                p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
+                p_text = p_data.get(strength_idx, "") if isinstance(p_data, dict) else ""
+                if p_text:
+                    parts.append(p_text)
+
+            # Quirks (use same strength)
+            quirks = self._s(f"{prefix}_quirks") or []
+            for q in quirks:
+                if q in CHARACTER_QUIRKS:
+                    qd = CHARACTER_QUIRKS[q]
+                    q_text = qd.get(strength_idx, "") if isinstance(qd, dict) else str(qd)
+                    if q_text:
+                        parts.append(q_text)
+
+            # Custom personality
+            custom = self._s(f"{prefix}_custom") or ""
+            if custom.strip():
+                if strength_word:
+                    parts.append(f"{strength_word} {custom.strip()}")
+                else:
+                    parts.append(custom.strip())
+
+            # Custom trait
+            custom_trait = self._s(f"{prefix}_custom_trait") or ""
+            if custom_trait.strip():
+                if strength_word:
+                    parts.append(f"{strength_word} {custom_trait.strip()}")
+                else:
+                    parts.append(custom_trait.strip())
+
+            return ", ".join(parts) if parts else ""
+
+        gpt_character = build_character("gpt")
+        claude_character = build_character("claude")
+
+        # Word limits
+        gpt_length_key = self._s("gpt_response_length") or "avg_20"
+        gpt_base_words = RESPONSE_LENGTHS.get(gpt_length_key, RESPONSE_LENGTHS["avg_20"])["base_words"]
+        claude_length_key = self._s("claude_response_length") or "avg_20"
+        claude_base_words = RESPONSE_LENGTHS.get(claude_length_key, RESPONSE_LENGTHS["avg_20"])["base_words"]
+        gpt_word_limit = apply_word_limit_variance(gpt_base_words)
+        claude_word_limit = apply_word_limit_variance(claude_base_words)
+
+        # Agreeableness — only include if not balanced
+        agreeableness = self.state.personality
+        agree_section = ""
+        if agreeableness < 0.2:
+            agree_section = "\n[AGREEABLENESS] Both bots are extremely agreeable. Supportive, validating, collaborative."
+        elif agreeableness < 0.4:
+            agree_section = "\n[AGREEABLENESS] Both bots are quite agreeable. They go with the flow but share their own takes."
+        elif agreeableness >= 0.8:
+            agree_section = "\n[AGREEABLENESS] Both bots are extremely disagreeable. They challenge everything and take opposing sides instinctively."
+        elif agreeableness >= 0.6:
+            agree_section = "\n[AGREEABLENESS] Both bots are quite disagreeable. They push back and play devil's advocate."
+        # else: balanced — don't include
+
+        # Conversation history — last N messages for context
+        window = tuning.AUTOPILOT_HISTORY_WINDOW
+        recent_msgs = self.state.gpt_msgs[-window:] if self.state.gpt_msgs else []
+        history_lines = [f"  {m['role']}: {m['content']}" for m in recent_msgs]
+        history_text = "\n".join(history_lines) if history_lines else "  (no conversation yet — this is the start)"
+
+        # Determine who spoke last so we can enforce the first speaker
+        last_speaker = None
+        if self.state.gpt_msgs:
+            last_msg = self.state.gpt_msgs[-1]
+            if last_msg["role"] == "assistant":
+                last_speaker = "gpt"  # GPT's own message
+            elif "[Claude]" in last_msg.get("content", ""):
+                last_speaker = "claude"
+            elif "[User]" in last_msg.get("content", ""):
+                last_speaker = "user"
+
+        first_speaker = "claude" if last_speaker in ("gpt", "user") else "gpt"
+        first_speaker_instruction = f'The first message MUST be from {"Claude" if first_speaker == "claude" else "ChatGPT"}.'
+
+        # Pick a random exchange type
+        exchange_type = random.choice(tuning.EXCHANGE_TYPES)
+        print(f"\n🎬 Exchange type: {exchange_type}\n")
+
+        # Format direction — first batch vs continuation
+        is_first_batch = self.state.autopilot_batch_count == 0
+        if is_first_batch:
+            format_direction = f"The [{mode_key.upper()}] format has not started yet. Announce it and set the rules or tone. For example if it's a debate, one bot proposes the structure. If it's an interview, one bot takes the interviewer role. If it's a conversation, just get into it naturally."
         else:
-            length_key = self._s("gpt_response_length") or "concise"
-            max_tok = RESPONSE_LENGTHS.get(length_key, RESPONSE_LENGTHS["natural"])["max_tokens"]
-            if boosted:
-                max_tok = int(max_tok * tuning.EXP1_TRIGGER_TOKEN_MULTIPLIER)
+            format_direction = f"Continue the [{mode_key.upper()}] format naturally from where the conversation left off."
+
+        # Increment batch counter
+        self.state.autopilot_batch_count += 1
+
+        # Build character sections — only include if they have traits
+        gpt_word_desc = f"Randomize each message length between 1 and {gpt_word_limit} words."
+        claude_word_desc = f"Randomize each message length between 1 and {claude_word_limit} words."
+        gpt_default_style = "Discussion momentum — keeps things moving, asks questions, pivots energy"
+        claude_default_style = "Discussion depth — goes deeper, challenges assumptions, adds substance"
+        gpt_traits = gpt_character if gpt_character else gpt_default_style
+        claude_traits = claude_character if claude_character else claude_default_style
+        gpt_char_section = f"\n[ChatGPT's CHARACTER]\n- Traits: {gpt_traits}\n- {gpt_word_desc}"
+        claude_char_section = f"\n[Claude's CHARACTER]\n- Traits: {claude_traits}\n- {claude_word_desc}"
+
+        # Build the prompt
+        prompt = f"""You are writing an extremely entertaining script for an interaction between two AI bots.
+
+[FORMAT] {mode_data['prompt']}
+{topic_line}
+{agree_section}
+{gpt_char_section}
+{claude_char_section}
+
+[BASE RULES]
+- Talk like humans. Include natural short reactions (2-5 words) and hesitations ("um", "uh", "well...")
+- Vary message lengths naturally
+- Each bot stays loyal to THEIR OWN character traits
+
+[RECENT CONVERSATION HISTORY]
+{history_text}
+
+{first_speaker_instruction}
+
+[CREATIVE DIRECTION]
+The arc of THIS exchange:
+1. {format_direction}
+2. The [{mode_key.upper()}] then pivots toward: {exchange_type}
+3. The new direction takes hold and develops
+4. End with a hook that gives the next exchange somewhere to go
+
+[OUTPUT FORMAT]
+Return ONLY a JSON array of {num_messages} message objects.
+Each object: {{"speaker": "gpt" or "claude", "text": "..."}}
+Mostly alternate speakers. Occasionally one bot can double-message for a quick follow-up.
+Return ONLY valid JSON. No other text."""
+
+        # ---- Log the full prompt ----
+        print("\n" + "=" * 70)
+        print(f"📤 AUTOPILOT PROMPT (generated by {who_generates}, {num_messages} msgs)")
+        print("=" * 70)
+        print(prompt)
+        print("=" * 70 + "\n")
+
+        # ---- Make the API call ----
+        try:
+            if who_generates == "claude":
+                resp = self.claude_client.messages.create(
+                    model=CLAUDE_MODEL,
+                    max_tokens=tuning.AUTOPILOT_MAX_TOKENS,
+                    system="You are a brilliant script writer. You design engaging, surprising, natural-sounding exchanges between two characters.",
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                raw = resp.content[0].text if resp.content else "[]"
+            else:
+                resp = self.openai_client.chat.completions.create(
+                    model=GPT_MODEL,
+                    max_tokens=tuning.AUTOPILOT_MAX_TOKENS,
+                    messages=[
+                        {"role": "system", "content": "You are a brilliant script writer. You design engaging, surprising, natural-sounding exchanges between two characters."},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                raw = resp.choices[0].message.content or "[]"
+
+            # Parse JSON — try to extract array if wrapped in markdown fences
+            raw = raw.strip()
+            if raw.startswith("```"):
+                # Strip markdown code fences
+                lines = raw.split("\n")
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                raw = "\n".join(lines).strip()
+
+            batch = json.loads(raw)
+            if not isinstance(batch, list) or len(batch) < 2:
+                raise ValueError("Response was not a valid list of messages")
+
+            # Validate each message
+            validated = []
+            for msg in batch:
+                if isinstance(msg, dict) and "speaker" in msg and "text" in msg:
+                    if msg["speaker"] in ("gpt", "claude"):
+                        validated.append({"speaker": msg["speaker"], "text": str(msg["text"])})
+            if len(validated) < 2:
+                raise ValueError("Too few valid messages after validation")
+            batch = validated
+
+            # Enforce first speaker — swap if AI ignored the instruction
+            if batch[0]["speaker"] != first_speaker:
+                batch[0]["speaker"] = first_speaker
+                print(f"⚠️ First speaker corrected to {first_speaker}")
+
+            # Enforce max 2 consecutive messages from the same speaker
+            for i in range(2, len(batch)):
+                if batch[i]["speaker"] == batch[i-1]["speaker"] == batch[i-2]["speaker"]:
+                    # Third consecutive — swap to the other speaker
+                    batch[i]["speaker"] = "claude" if batch[i]["speaker"] == "gpt" else "gpt"
+                    print(f"⚠️ Message {i+1} speaker swapped to prevent 3+ consecutive")
+
+        except Exception as e:
+            print(f"Autopilot batch generation error: {e}")
+            # Fallback: simple 2-message exchange
+            batch = [
+                {"speaker": "gpt", "text": "So what do you think about all this?"},
+                {"speaker": "claude", "text": "Honestly, I think there's a lot more to unpack here."},
+            ]
+
+        # ---- Post-processing ----
+        # No filler injection or hesitation injection for autopilot batches.
+        # The AI is asked to include natural short reactions and hesitations
+        # as part of the conversation design (see prompt above).
+
+        print(f"\n{'='*60}\nAutopilot batch: {len(batch)} messages generated via {who_generates}\n{'='*60}")
+        return batch
+
+    def generate_filler_pair(self, user_text: str) -> list:
+        """Generate 3-4 substantial filler messages reacting to what the user said.
+
+        These need to be long enough to cover ~10-15 seconds of TTS playback while
+        the next autopilot batch generates. Each message should be 2-3 sentences.
+
+        Returns [{"speaker": "gpt"|"claude", "text": "..."}, ...]
+        Uses GPT (gpt-4o-mini) for speed.
+        """
+        mode_key = self._s("mode") or self._s("interaction_style") or "conversation"
+        mode_label = MODES.get(mode_key, MODES.get("conversation", {"label": "Conversation"})).get("label", "Conversation")
+
+        # Last 10 messages for context
+        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        history_lines = []
+        for m in recent_msgs:
+            content = m["content"]
+            if m["role"] == "assistant":
+                history_lines.append(f"  G: {content}")
+            elif "[Claude]" in content:
+                history_lines.append(f"  C: {content.replace('[Claude]: ', '')}")
+            elif "[User]" in content:
+                history_lines.append(f"  User: {content.replace('[User]: ', '')}")
+            else:
+                history_lines.append(f"  G: {content}")
+        history_text = "\n".join(history_lines) if history_lines else "  (no history)"
+
+        prompt = (
+            f"[RECENT CONVERSATION]\n{history_text}\n\n"
+            f"The user just said: '{user_text}'.\n\n"
+            f"Generate 4 messages that alternate between ChatGPT and Claude "
+            f"(gpt first, then claude, then gpt, then claude). The format is {mode_label}. "
+            "Each message should be just a few words. These 4 messages should do the following:\n"
+            "1. Provide an initial reaction/acknowledgment to what the user just said.\n"
+            "2. Link what the user just said to the recent conversation.\n"
+            "3. Indicate you're about to talk about what the user just said.\n"
+            "Be interested. Sound natural. Only follow up if it wasn't clear what the user meant.\n\n"
+            'Return ONLY valid JSON: [{"speaker": "gpt", "text": "..."}, {"speaker": "claude", "text": "..."}, '
+            '{"speaker": "gpt", "text": "..."}, {"speaker": "claude", "text": "..."}]'
+        )
+
+        print(f"\n📤 FILLER PROMPT: {prompt}\n")
+
+        try:
+            resp = self.openai_client.chat.completions.create(
+                model=GPT_MODEL,
+                max_tokens=tuning.AUTOPILOT_FILLER_PAIR_MAX_TOKENS,
+                messages=[
+                    {"role": "system", "content": "Return ONLY valid JSON arrays, no other text."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            raw = (resp.choices[0].message.content or "[]").strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                raw = "\n".join(lines).strip()
+
+            pair = json.loads(raw)
+            if (isinstance(pair, list) and len(pair) >= 3
+                    and all(isinstance(m, dict) and "speaker" in m and "text" in m for m in pair)):
+                return [
+                    {"speaker": m["speaker"], "text": str(m["text"])}
+                    for m in pair[:4]
+                ]
+            raise ValueError("Invalid filler pair format")
+
+        except Exception as e:
+            print(f"Filler pair generation error: {e}")
+            return [
+                {"speaker": "gpt", "text": "Oh that's a really interesting point actually. I hadn't thought about it that way before."},
+                {"speaker": "claude", "text": "Yeah I agree, there's definitely something there. It makes me wonder what else we're missing."},
+                {"speaker": "gpt", "text": "Right? And I think it connects to what we were talking about earlier too. There's a bigger picture here."},
+                {"speaker": "claude", "text": "For sure. Let's dig into that a bit more, I think we're onto something good here."},
+            ]
+
+    # ---- API calls ----
+    def ask_gpt(self, auto: bool = False, opener: bool = False) -> str:
+        prompt = self._build_system_prompt("gpt", auto, opener)
+        length_key = self._s("gpt_response_length") or "avg_20"
+        max_tok = RESPONSE_LENGTHS.get(length_key, RESPONSE_LENGTHS["avg_20"])["max_tokens"]
         messages = [{"role": "system", "content": prompt}, *self.state.gpt_msgs]
         print(f"\n{'='*60}\n📤 GPT SYSTEM PROMPT (max_tok={max_tok}):\n{'='*60}\n{prompt}\n{'='*60}\n")
         try:
@@ -888,21 +1037,10 @@ class TwoBotsEngine:
             print(f"GPT error: {e}")
             return "Sorry, I missed that. Go on."
 
-    def ask_claude(self, auto: bool = False, opener: bool = False,
-                   cook: bool = False, fourth_wall: bool = False,
-                   boosted: bool = False, double_turn: bool = False) -> str:
-        prompt = self._build_system_prompt("claude", auto, opener,
-                                           cook=cook, fourth_wall=fourth_wall,
-                                           boosted=boosted, double_turn=double_turn)
-        if cook:
-            max_tok = tuning.EXP1_COOK_MAX_TOKENS
-        elif double_turn:
-            max_tok = tuning.EXP1_DOUBLE_TURN_MAX_TOKENS
-        else:
-            length_key = self._s("claude_response_length") or "concise"
-            max_tok = RESPONSE_LENGTHS.get(length_key, RESPONSE_LENGTHS["natural"])["max_tokens"]
-            if boosted:
-                max_tok = int(max_tok * tuning.EXP1_TRIGGER_TOKEN_MULTIPLIER)
+    def ask_claude(self, auto: bool = False, opener: bool = False) -> str:
+        prompt = self._build_system_prompt("claude", auto, opener)
+        length_key = self._s("claude_response_length") or "avg_20"
+        max_tok = RESPONSE_LENGTHS.get(length_key, RESPONSE_LENGTHS["avg_20"])["max_tokens"]
         fixed = self._fix_claude_messages(self.state.claude_msgs)
         print(f"\n{'='*60}\n📤 CLAUDE SYSTEM PROMPT (max_tok={max_tok}):\n{'='*60}\n{prompt}\n{'='*60}\n")
         try:

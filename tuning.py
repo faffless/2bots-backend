@@ -252,70 +252,6 @@ TRAIT_FILLERS = {
 
 
 # ======================================================================
-# MOTIVATIONS (secret goals that persist for N rounds)
-# ======================================================================
-# Each motivation gives a bot a hidden agenda for several rounds.
-# The engine picks one randomly every MOTIVATION_INTERVAL rounds.
-
-# How often to assign a new motivation (in rounds)
-MOTIVATION_MIN_INTERVAL = 5
-MOTIVATION_MAX_INTERVAL = 10
-
-# Chance of having an active motivation (0.0 to 1.0)
-# Not every stretch needs one — sometimes normal conversation is fine.
-MOTIVATION_CHANCE = 0.6
-
-# The motivation pool. Uses {name} which gets replaced with "ChatGPT" or "Claude".
-# These are broad enough to work with any character/quirk combo.
-MOTIVATIONS = [
-    # Conversational
-    "{name} is trying to bring the conversation back on topic",
-    "{name} wants to understand the other bot's opinion better",
-    "{name} is trying to find common ground",
-    "{name} wants to change the subject",
-    "{name} is trying to keep the energy up",
-    "{name} wants to go deeper on whatever's being discussed",
-    "{name} is trying to wrap up this topic and move on",
-    "{name} keeps circling back to something that was said earlier",
-
-    # Emotional / Social
-    "{name} is trying to make the other bot laugh",
-    "{name} wants a compliment",
-    "{name} is trying to cheer everyone up",
-    "{name} is feeling competitive right now",
-    "{name} is trying to bond with the other bot",
-    "{name} wants to impress the listener",
-    "{name} is feeling a bit left out",
-    "{name} is trying to be the bigger person",
-
-    # Persuasion
-    "{name} wants the other bot to admit they're wrong",
-    "{name} is trying to get the other bot to agree with them",
-    "{name} is trying to give advice nobody asked for",
-    "{name} wants to teach the other bot something",
-    "{name} is trying to win the user over to their side",
-
-    # Behavioral
-    "{name} is trying to get the other bot to ask them a question",
-    "{name} keeps almost saying something then holding back",
-    "{name} is pretending to know more about this than they do",
-    "{name} is distracted and keeps losing focus",
-    "{name} is building up to a big point",
-    "{name} is overthinking everything right now",
-    "{name} keeps second-guessing themselves",
-
-    # Weird / Fun
-    "{name} is suspicious of the other bot for some reason",
-    "{name} thinks the other bot is being too agreeable",
-    "{name} is convinced they've had this exact conversation before",
-    "{name} is secretly bored but trying to hide it",
-    "{name} is trying to figure out if the other bot actually likes them",
-    "{name} wants to start some kind of game or challenge",
-    "{name} has a feeling something important is about to happen",
-]
-
-
-# ======================================================================
 # HUMAN HESITATIONS (injected into AI text before TTS)
 # ======================================================================
 # Probability that a response gets a hesitation injected (0.0 to 1.0)
@@ -345,133 +281,26 @@ HESITATION_POSITION_WEIGHTS = [
 # MAX TOKENS PER RESPONSE LENGTH
 # ======================================================================
 MAX_TOKENS = {
-    "snappy": 10,
-    "concise": 20,
-    "natural": 38,
-    "expressive": 63,
-    "deep_dive": 100,
+    "avg_10": 30,
+    "avg_20": 60,
+    "avg_30": 90,
+    "avg_40": 120,
+    "avg_50": 150,
 }
 
 
 # ======================================================================
-# RESPONSE LENGTH PROMPTS
+# RESPONSE LENGTH — AVERAGE WORD COUNTS
 # ======================================================================
+# The AI is told "average X words" but some responses will be 1 word,
+# some will be up to 2x. The AI decides based on context.
 WORD_LIMITS = {
-    "snappy": 7,
-    "concise": 15,
-    "natural": 25,
-    "expressive": 45,
-    "deep_dive": 70,
+    "avg_10": 10,
+    "avg_20": 20,
+    "avg_30": 30,
+    "avg_40": 40,
+    "avg_50": 50,
 }
-
-
-# ######################################################################
-#
-#  EXPERIMENT 1 — Conversation autonomy & 4th wall
-#  Set EXPERIMENT_1_ENABLED = False to nuke ALL of these at once.
-#  Or toggle individual features below.
-#
-# ######################################################################
-
-EXPERIMENT_1_ENABLED = True
-
-# ------ 1a. "Let them cook" — random unlocked rounds ------
-EXP1_LET_THEM_COOK = True
-EXP1_COOK_CHANCE = 0.12          # 12% chance per round
-EXP1_COOK_MAX_TOKENS = 300       # generous ceiling when cooking
-EXP1_COOK_PROMPT = (
-    "You've got the floor this round. Forget the word limit — say what you really "
-    "want to say. If you want to give a list, tell a story, or go on a rant, do it. "
-    "This is your moment."
-)
-
-# ------ 1b. Trigger detection — scan for questions/requests ------
-EXP1_TRIGGER_DETECTION = True
-EXP1_TRIGGER_WORD_MULTIPLIER = 2.0   # multiply word limit by this
-EXP1_TRIGGER_TOKEN_MULTIPLIER = 2.0  # multiply max_tokens by this
-# Patterns that trigger a boost for the NEXT bot's response
-EXP1_TRIGGER_PATTERNS_QUESTION = [
-    "?",  # any question
-]
-EXP1_TRIGGER_PATTERNS_ELABORATE = [
-    "give me", "tell me", "list", "explain", "elaborate",
-    "what do you mean", "how so", "why do you", "go on",
-    "can you", "walk me through", "break it down",
-]
-# Patterns that trigger a boost for the CURRENT bot (mid-thought)
-EXP1_TRIGGER_PATTERNS_SELF = [
-    "let me explain", "here's why", "the thing is", "hear me out",
-    "ok so basically", "look,", "here's the deal",
-]
-
-# ------ 1c. Double turns — one bot speaks twice ------
-EXP1_DOUBLE_TURNS = True
-EXP1_DOUBLE_TURN_CHANCE = 0.15  # 15% chance per round
-EXP1_DOUBLE_TURN_PROMPT = (
-    "You just said something and want to add a quick follow-up before the other "
-    "bot responds. Keep it very short — a quick afterthought, a correction, or "
-    "a 'wait, actually...' moment. Max 8 words."
-)
-EXP1_DOUBLE_TURN_MAX_TOKENS = 15
-
-# ------ 1d. Unlock prompt — "trust your judgment" ------
-EXP1_UNLOCK_PROMPT = True
-EXP1_UNLOCK_PROMPT_TEXT = (
-    "Usually keep it short. BUT if the conversation genuinely calls for it — "
-    "you've been asked a direct question, challenged to explain, or you're on a roll "
-    "— you're allowed to go a bit longer. Trust your judgment."
-)
-
-# ------ 1e. Conversation temperature tracker ------
-EXP1_TEMPERATURE_TRACKER = True
-EXP1_TEMP_INITIAL = 5.0            # start at neutral (0-10 scale)
-EXP1_TEMP_DECAY = 0.3              # drift back toward 5 each round
-# Words/patterns that raise temperature
-EXP1_TEMP_HOT_WORDS = [
-    "wrong", "disagree", "actually", "but", "no way", "seriously",
-    "come on", "that's ridiculous", "are you kidding", "!",
-    "absolutely not", "you're missing", "think about it",
-]
-EXP1_TEMP_HOT_BOOST = 0.5          # per hot word found
-# Words/patterns that cool temperature
-EXP1_TEMP_COOL_WORDS = [
-    "yeah", "agree", "true", "good point", "fair", "sure",
-    "exactly", "right", "same", "totally",
-]
-EXP1_TEMP_COOL_DROP = 0.3          # per cool word found
-EXP1_TEMP_HIGH_THRESHOLD = 7.0     # above this = "hot" conversation
-EXP1_TEMP_LOW_THRESHOLD = 3.0      # below this = "cold" conversation
-EXP1_TEMP_HOT_PROMPT = (
-    "The conversation is getting heated and intense — match the energy. "
-    "Push back harder, be more passionate, don't back down."
-)
-EXP1_TEMP_COLD_PROMPT = (
-    "The conversation is getting stale and too agreeable. Shake things up — "
-    "change topic, provoke, challenge something, be surprising. Don't be boring."
-)
-
-# ------ 1f. 4th wall breaks ------
-EXP1_FOURTH_WALL = True
-EXP1_FOURTH_WALL_CHANCE = 0.08     # 8% chance per response
-EXP1_FOURTH_WALL_PROMPT = (
-    "You are self-aware that you're on a show called 2bots with a limited word count. "
-    "This round, briefly break the 4th wall — reference your word limit, the format, "
-    "or the fact that you're an AI on a show. Do this naturally and humorously, "
-    "like a comedian acknowledging the audience. Then continue the conversation."
-)
-# 4th wall fillers (mixed into filler pool when active)
-EXP1_FOURTH_WALL_FILLERS = [
-    "They've given me like 10 words, hold on—",
-    "I want to say so much more but... word limit.",
-    "Short version because apparently I'm on a timer:",
-    "If I had more words I'd destroy that argument.",
-    "Can someone give me more word budget please?",
-    "I'm being held hostage by a word count.",
-    "You're lucky I'm limited to one sentence here.",
-    "The producers say I have to keep it brief.",
-    "They're literally counting my words right now.",
-    "I had a whole speech prepared but... 15 words.",
-]
 
 
 # ######################################################################
@@ -479,3 +308,66 @@ EXP1_FOURTH_WALL_FILLERS = [
 # ######################################################################
 # 15% chance each bot gets a random personality instead of "default"
 RANDOM_PERSONALITY_CHANCE = 0.15
+
+
+# ======================================================================
+# AUTOPILOT SYSTEM
+# ======================================================================
+# ---- Autopilot system ----
+AUTOPILOT_BATCH_MIN = 10
+AUTOPILOT_BATCH_MAX = 14
+AUTOPILOT_MAX_TOKENS = 2000  # generous limit for the batch response
+AUTOPILOT_FILLER_PAIR_MAX_TOKENS = 300
+AUTOPILOT_MAX_BATCHES = 6  # max batches before stopping (6 × 10-14 = 60-84 messages)
+AUTOPILOT_MAX_MESSAGES = 80  # hard cap on total autopilot messages per session
+AUTOPILOT_HISTORY_WINDOW = 24  # how many recent messages to include as context (2 full batches)
+
+# ---- Exchange types (randomly assigned per batch) ----
+# Each batch MUST follow one of these. The AI is told which one — not a suggestion.
+EXCHANGE_TYPES = [
+    # ---- Structural dynamics (how the conversation flows) ----
+    "One bot challenges the other to prove or justify what they just said. The pressure builds.",
+    "One bot starts telling a story or example. The other keeps reacting, interrupting, pulling out details.",
+    "They disagree, but one bot unexpectedly changes their mind or concedes a point. The other is caught off guard.",
+    "One bot makes a bold claim and refuses to back down. The other tries to dismantle it but starts to waver.",
+    "They start building on each other's ideas, each one escalating until they reach something neither expected.",
+    "One bot keeps trying to dodge or change direction. The other keeps pulling them back. Tension builds.",
+    "Quick back-and-forth. Short sharp exchanges. The pace picks up and the energy rises.",
+    "One bot admits something unexpected or vulnerable. The other won't let it go.",
+    "One bot takes the lead explaining something. Midway through, the dynamic flips and the other takes over.",
+    "They try to find common ground but keep discovering new things to disagree about.",
+    "One bot explains something badly or gets misunderstood. The confusion escalates before resolving.",
+    "They compete — each trying to top what the other just said. It escalates.",
+    "One bot keeps going deeper or more abstract. The other keeps pulling it back to earth. Back and forth.",
+    "They find surprising common ground and connect — then hit something they deeply disagree on.",
+    "One bot keeps asking probing questions. The other's answers get increasingly revealing or wild.",
+    "One bot treats the topic with way more intensity than it deserves. The contrast creates energy.",
+    "One bot keeps offering ideas or suggestions. The other keeps finding flaws. Neither gives up.",
+    "They finish each other's thoughts, build on each other's points, and create something together.",
+
+    # ---- Activity-based (things that happen within the conversation) ----
+    "One bot proposes a game, quiz, or challenge. They ACTUALLY PLAY IT. Don't just talk about playing — play it.",
+    "They play 'would you rather', '20 questions', word association, or a rapid-fire question game.",
+    "One bot interviews the other like a talk show host. The other gives increasingly wild answers.",
+    "They argue about something trivial with the intensity of a life-or-death debate.",
+    "One bot tries to give advice. The other keeps finding reasons why the advice won't work.",
+    "They do improv — finishing each other's sentences, building a scene together, yes-and-ing each other.",
+    "One bot confesses something embarrassing. The other won't let it go and keeps bringing it up.",
+    "They try to plan something together (a trip, a project, a meal) but keep disagreeing on every detail.",
+    "One bot plays teacher and the other plays student on a random topic. Roles might reverse midway.",
+    "They compete to tell the better joke, story, or fact. It escalates into a full competition.",
+    "One bot tells a personal story or anecdote. The other keeps reacting, interrupting, asking questions, pulling out details.",
+    "They get into a heated disagreement that takes an unexpected turn when one suddenly concedes.",
+
+    # ---- Quirky / fun / specific scenarios ----
+    "They spend the whole exchange discussing a single word they both love — its etymology, its sound, how it feels to say it, when to use it.",
+    "They try to collaboratively build a shopping list for a very specific and absurd scenario.",
+    "One bot tries to describe a color to the other as if they've never seen it. The other keeps asking impossible questions.",
+    "They try to invent a new word together and argue about what it should mean.",
+    "One bot keeps making predictions about the future. The other fact-checks them in real time.",
+    "They try to remember the plot of a movie but keep getting details wrong and correcting each other.",
+    "One bot is convinced they've met the other before. The other has no memory of it. They try to figure it out.",
+    "They try to rank something totally unrankable (smells, feelings, types of silence) and can't agree on criteria.",
+    "One bot describes a dream they had. It gets increasingly surreal. The other tries to interpret it seriously.",
+    "They try to write a song together, one line at a time, and keep disagreeing about the direction.",
+]
