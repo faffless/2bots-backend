@@ -1231,12 +1231,9 @@ These 4 messages should:
 - Feel like the genuine beginning of the next exchange, not filler
 
 Rules:
-- Keep them short and conversational.
-- Each message should usually be around 3 to 14 words.
-- At least one of the 4 messages should add a real angle, question, claim, or reaction — not just acknowledgment.
-- Be interested and natural.
-- Only ask a clarifying question if the user seems to be inviting that OR if the user's meaning is actually unclear.
-- Avoid generic lines like "that's interesting" unless they sound natural in context.
+1. Keep them short and conversational.
+2. Each message should usually be around 3 to 14 words. Only ask a clarifying question if the user seems to be inviting that OR if the user's meaning is actually unclear.
+3. The 4th message should set the tone for a much broader/deeper discussion on what the user said.
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
