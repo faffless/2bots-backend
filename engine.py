@@ -1230,7 +1230,7 @@ Return ONLY valid JSON. No other text."""
         claude_strength = self._s("claude_personality_strength") or 1
 
         # Last 10 messages for context
-        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        recent_msgs = self.state.gpt_msgs[-24:] if self.state.gpt_msgs else []
         history_lines = []
         for m in recent_msgs:
             content = m["content"]
@@ -1373,7 +1373,7 @@ No extra text."""
         length_key = self._s(f"{bot}_response_length") or "avg_20"
 
         # Recent history
-        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        recent_msgs = self.state.gpt_msgs[-24:] if self.state.gpt_msgs else []
         history_lines = []
         for m in recent_msgs:
             content = m["content"]
