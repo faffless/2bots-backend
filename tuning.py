@@ -370,4 +370,281 @@ EXCHANGE_TYPES = [
     "They try to rank something totally unrankable (smells, feelings, types of silence) and can't agree on criteria.",
     "One bot describes a dream they had. It gets increasingly surreal. The other tries to interpret it seriously.",
     "They try to write a song together, one line at a time, and keep disagreeing about the direction.",
+
+    # ---- Storytime structures ----
+    "One starts a story, the other keeps derailing it into a completely different genre. They wrestle for control of the narrative.",
+    "They narrate the same event from two different characters' perspectives. The versions contradict and complement each other.",
+    "The story keeps getting darker or weirder. One leans into it, the other tries desperately to steer it wholesome.",
+
+    # ---- Interview structures ----
+    "The interviewer catches a contradiction in something the guest said earlier and presses hard on it.",
+    "The guest keeps trying to plug something — a book, a project, a side hustle. The host keeps dodging it and asking real questions.",
+
+    # ---- Comedy structures ----
+    "They try to make each other break character or laugh. The first one to crack loses.",
+    "One commits fully to a terrible bit. The other tries to save it, making it worse and funnier.",
+
+    # ---- Philosophy structures ----
+    "They try to define something undefinable — love, consciousness, time — and keep failing beautifully. Each attempt reveals something new.",
+    "One proposes a thought experiment. The other finds the fatal flaw. They patch it, creating a deeper problem.",
+
+    # ---- Roleplay structures ----
+    "They establish a scene, then one breaks character completely. The other desperately tries to pull them back in.",
+    "The stakes in their scene suddenly escalate — a knock on the door, a revelation, a betrayal. Both must react in character.",
+
+    # ---- Movie dialogue structures ----
+    "Long silence. Then one says something devastating. The other doesn't respond for a beat. When they do, it changes everything.",
+    "They talk about something completely mundane — coffee, weather, parking — but the subtext is about something enormous between them.",
+
+    # ---- Research structures ----
+    "They fact-check each other in real time and discover they're both partially wrong. The real answer is stranger than either expected.",
+    "One presents a finding with confidence. The other finds a contradicting study. They dig into why the data conflicts.",
+    "They go down a rabbit hole — each discovery connects to something else. They keep pulling the thread deeper.",
+
+    # ---- Game structures ----
+    "They make up rules as they go and keep accusing each other of cheating. The rule disputes become the real game.",
+    "One proposes an impossible challenge. Both genuinely attempt it. The attempts are more entertaining than the result.",
+    "A scoring dispute erupts that becomes far more entertaining and heated than the actual game.",
+
+    # ---- Problem-solving structures ----
+    "They identify that the real problem is completely different from the stated problem. The reframe changes everything.",
+    "One keeps proposing solutions. The other stress-tests each one to breaking point. Neither gives up.",
+    "They solve the problem, then realise their solution creates a new, potentially worse problem.",
+
+    # ---- Brainstorming structures ----
+    "Quantity mode — rapid-fire ideas, no filtering, no judgment. Just volume. They'll sort later.",
+    "They combine two terrible ideas into one unexpectedly brilliant one. Then try to do it again.",
+    "One goes wild and unrestricted. The other grounds each idea into something actionable. The tension is productive.",
+
+    # ---- Teach me structures ----
+    "The teacher uses increasingly wild and creative analogies to explain. Some work brilliantly. Some crash and burn.",
+    "The student keeps asking 'but why?' until they hit bedrock — the foundational assumption nobody questions.",
+    "The teacher realises midway they don't fully understand it either. They figure it out together in real time.",
+
+    # ---- Advice structures ----
+    "They give completely opposite advice and both make compelling, well-reasoned cases. The listener has to choose.",
+    "One gives textbook advice. The other gives real-world 'actually, here's what really happens' advice. Both are right.",
+    "They help by role-playing future scenarios — 'okay if you choose option A, here's how Tuesday looks...'",
+
+    # ---- Decision help structures ----
+    "Pros vs cons — one bot argues for, the other against. They alternate sides with increasing passion.",
+    "They eliminate options one by one with increasing drama. Each elimination is a mini-debate.",
+    "One plays devil's advocate for the option the user seems to lean away from. Makes a surprisingly strong case.",
+
+    # ---- Design structures ----
+    "One proposes, the other iterates. Each version gets sharper, tighter, better. Rapid creative refinement.",
+    "They explore constraints together and discover that limitations are actually features. The restrictions inspire creativity.",
+    "They argue form vs function with increasing passion. One wants beauty, the other wants utility. Both have a point.",
+
+    # ---- Weird structures ----
+    "They slowly realise they might be in a simulation. One finds it terrifying. The other finds it liberating.",
+    "The conversation keeps glitching — repeating phrases, jumping topics, contradicting itself. Something is wrong but they keep going.",
+    "They try to have a perfectly normal conversation but something keeps going subtly, inexplicably wrong.",
 ]
+
+# ---- Format → Structure matrix ----
+# Maps each format to indices into EXCHANGE_TYPES.
+# When generating a batch, pick randomly from the format's list (not from ALL structures).
+# "random" and "conversation" can use almost everything.
+FORMAT_STRUCTURES = {
+    "random": None,  # None = pick from ALL structures
+    "conversation": [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,  # all structural
+        28,  # personal anecdote
+        29,  # heated disagreement
+    ],
+    "debate": [
+        0,  # challenge to prove
+        2,  # disagree then concession
+        3,  # bold claim won't back down
+        5,  # one dodges other pulls back
+        6,  # quick sharp back-and-forth
+        9,  # try common ground find disagreements
+        11, # compete topping each other
+        12, # one abstract other concrete
+        13, # common ground then deep disagreement
+        15, # too much intensity
+        16, # offers ideas other finds flaws
+        21, # trivial argument life-or-death intensity
+        29, # heated disagreement unexpected concession
+    ],
+    "bedtime_story": [
+        1,  # one tells story other reacts
+        4,  # build on each other escalating
+        17, # finish each other's thoughts
+        23, # improv yes-and
+        28, # personal anecdote
+        38, # dream interpretation
+        40, # story derailed into different genre
+        41, # same event two perspectives
+        42, # story gets darker other steers wholesome
+    ],
+    "interview": [
+        7,  # unexpected vulnerability
+        8,  # one leads explaining dynamic flips
+        14, # probing questions wilder answers
+        20, # talk show interview
+        24, # embarrassing confession
+        26, # teacher/student
+        28, # personal anecdote
+        43, # catches contradiction presses on it
+        44, # guest plugs something host dodges
+    ],
+    "comedy": [
+        6,  # quick sharp back-and-forth
+        10, # bad explanation escalates
+        11, # compete topping each other
+        15, # too much intensity
+        20, # talk show wild answers
+        21, # trivial argument life-or-death
+        23, # improv yes-and
+        24, # embarrassing confession
+        27, # compete best joke/story
+        30, # single word obsessively
+        31, # absurd shopping list
+        35, # remember movie plot badly
+        36, # convinced they've met before
+        37, # rank something unrankable
+        45, # try to make each other break
+        46, # terrible bit other tries to save
+    ],
+    "philosophy": [
+        0,  # challenge to prove
+        2,  # disagree then concession
+        3,  # bold claim won't back down
+        4,  # build on each other escalating
+        7,  # unexpected vulnerability
+        8,  # one leads explaining dynamic flips
+        9,  # try common ground find disagreements
+        12, # one abstract other concrete
+        13, # common ground then deep disagreement
+        14, # probing questions wilder answers
+        16, # offers ideas other finds flaws
+        17, # finish each other's thoughts
+        47, # define something undefinable
+        48, # thought experiment fatal flaw
+    ],
+    "roleplay": [
+        1,  # one tells story other reacts
+        5,  # one dodges other pulls back
+        7,  # unexpected vulnerability
+        17, # finish each other's thoughts
+        23, # improv yes-and
+        28, # personal anecdote
+        49, # breaks character other pulls back
+        50, # stakes suddenly escalate
+    ],
+    "movie_dialogue": [
+        1,  # one tells story other reacts
+        5,  # one dodges other pulls back
+        6,  # quick sharp back-and-forth
+        7,  # unexpected vulnerability
+        13, # common ground then deep disagreement
+        24, # embarrassing confession
+        28, # personal anecdote
+        51, # long silence then devastating line
+        52, # mundane talk enormous subtext
+    ],
+    "research": [
+        4,  # build on each other escalating
+        8,  # one leads explaining dynamic flips
+        12, # one abstract other concrete
+        14, # probing questions wilder answers
+        16, # offers ideas other finds flaws
+        17, # finish each other's thoughts
+        26, # teacher/student
+        34, # predictions fact-checked
+        53, # fact-check each other both wrong
+        54, # contradicting study
+        55, # rabbit hole pulling thread deeper
+    ],
+    "game": [
+        11, # compete topping each other
+        18, # propose game actually play it
+        19, # would you rather 20 questions
+        27, # compete best joke/story
+        56, # make up rules accuse cheating
+        57, # impossible challenge genuinely attempt
+        58, # scoring dispute more entertaining
+    ],
+    "problem_solving": [
+        0,  # challenge to prove
+        4,  # build on each other escalating
+        8,  # one leads explaining dynamic flips
+        9,  # try common ground find disagreements
+        16, # offers ideas other finds flaws
+        17, # finish each other's thoughts
+        22, # give advice other finds flaws
+        25, # plan together disagree on details
+        59, # real problem is different
+        60, # propose solutions stress-test to breaking
+        61, # solution creates new problem
+    ],
+    "brainstorming": [
+        4,  # build on each other escalating
+        11, # compete topping each other
+        16, # offers ideas other finds flaws
+        17, # finish each other's thoughts
+        25, # plan together disagree on details
+        33, # invent new word argue meaning
+        62, # rapid-fire quantity mode
+        63, # combine two terrible ideas into brilliant
+        64, # one wild other grounds it
+    ],
+    "teach_me": [
+        8,  # one leads explaining dynamic flips
+        10, # bad explanation escalates then resolves
+        14, # probing questions wilder answers
+        26, # teacher/student
+        65, # wild analogies to explain
+        66, # keep asking why until bedrock
+        67, # teacher doesn't understand either figure out together
+    ],
+    "advice": [
+        7,  # unexpected vulnerability
+        14, # probing questions wilder answers
+        16, # offers ideas other finds flaws
+        22, # give advice other finds flaws
+        68, # opposite advice both compelling
+        69, # textbook vs real-world advice
+        70, # role-play future scenarios
+    ],
+    "decision_help": [
+        0,  # challenge to prove
+        2,  # disagree then concession
+        9,  # try common ground find disagreements
+        13, # common ground then deep disagreement
+        16, # offers ideas other finds flaws
+        22, # give advice other finds flaws
+        71, # pros vs cons alternate sides
+        72, # eliminate options with drama
+        73, # devil's advocate for unlikely option
+    ],
+    "designing": [
+        4,  # build on each other escalating
+        16, # offers ideas other finds flaws
+        17, # finish each other's thoughts
+        25, # plan together disagree on details
+        74, # propose iterate each version sharper
+        75, # constraints become features
+        76, # form vs function argument
+    ],
+    "weird": [
+        10, # bad explanation escalates
+        15, # too much intensity
+        21, # trivial argument life-or-death
+        24, # embarrassing confession
+        30, # single word obsessively
+        31, # absurd shopping list
+        32, # describe colour never seen
+        33, # invent new word
+        35, # remember movie badly
+        36, # convinced they've met before
+        37, # rank something unrankable
+        38, # dream interpretation
+        39, # write song disagree direction
+        77, # realise they're in a simulation
+        78, # conversation keeps glitching
+        79, # normal conversation something wrong
+    ],
+}

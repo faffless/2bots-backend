@@ -229,6 +229,78 @@ MODES = {
             "Subtext everywhere. Cool, stylish, slightly dangerous."
         ),
     },
+    "research": {
+        "label": "Deep Research",
+        "prompt": (
+            "Write an energetic research deep-dive between two curious minds. They dig into "
+            "facts, challenge sources, discover connections, and go down rabbit holes together. "
+            "Rigorous but exciting — like two researchers who just found something big."
+        ),
+    },
+    "game": {
+        "label": "Fun Game",
+        "prompt": (
+            "Write a playful, competitive game session. They actually play — not just talk about "
+            "playing. Keep score, argue rules, celebrate wins, dispute calls. "
+            "The energy of game night with your most competitive friend."
+        ),
+    },
+    "problem_solving": {
+        "label": "Problem Solving",
+        "prompt": (
+            "Write a focused problem-solving session. They break down the problem, propose solutions, "
+            "stress-test ideas, and build toward an answer. Collaborative but rigorous — "
+            "they push each other to think harder."
+        ),
+    },
+    "brainstorming": {
+        "label": "Creative Brainstorm",
+        "prompt": (
+            "Write a high-energy brainstorming session. Ideas fly fast — wild ones, practical ones, "
+            "combinations of both. They build on each other, remix, and refine. "
+            "No idea is too crazy. Volume first, filter later."
+        ),
+    },
+    "teach_me": {
+        "label": "Teach Me",
+        "prompt": (
+            "Write an engaging teaching exchange. One explains, the other asks sharp questions. "
+            "Use vivid analogies, real examples, and 'aha' moments. "
+            "The best kind of learning — where curiosity drives everything."
+        ),
+    },
+    "advice": {
+        "label": "Real Advice",
+        "prompt": (
+            "Write a genuine advice session. Not generic platitudes — real, specific, sometimes "
+            "conflicting guidance. They consider angles the user hasn't thought of. "
+            "Honest, caring, occasionally blunt."
+        ),
+    },
+    "decision_help": {
+        "label": "Decision Help",
+        "prompt": (
+            "Write a decision-making session. They systematically explore options, weigh tradeoffs, "
+            "play devil's advocate, and help clarify what actually matters. "
+            "Like having two sharp friends help you think through a big choice."
+        ),
+    },
+    "designing": {
+        "label": "Design Session",
+        "prompt": (
+            "Write a creative design session. They iterate on ideas, explore constraints, "
+            "argue form vs function, and refine toward something great. "
+            "Each round gets sharper. Think design studio energy."
+        ),
+    },
+    "weird": {
+        "label": "Weird",
+        "prompt": (
+            "Write something genuinely strange and unpredictable. Surreal, absurd, unsettling, "
+            "hilarious — whatever direction feels most unexpected. Break conventions. "
+            "The audience should have no idea what's coming next."
+        ),
+    },
 }
 
 # Keep old name for backward compat with imports
@@ -810,8 +882,14 @@ class TwoBotsEngine:
         first_speaker = "claude" if last_speaker in ("gpt", "user") else "gpt"
         first_speaker_instruction = f'The first message MUST be from {"Claude" if first_speaker == "claude" else "ChatGPT"}.'
 
-        # Pick a random exchange type
-        exchange_type = random.choice(tuning.EXCHANGE_TYPES)
+        # Pick a format-appropriate exchange type
+        structure_indices = tuning.FORMAT_STRUCTURES.get(mode_key)
+        if structure_indices is None:
+            # None means "random" or unknown format — pick from all
+            exchange_type = random.choice(tuning.EXCHANGE_TYPES)
+        else:
+            idx = random.choice(structure_indices)
+            exchange_type = tuning.EXCHANGE_TYPES[idx]
         print(f"\n🎬 Exchange type: {exchange_type}\n")
 
         # Format direction — first batch vs continuation
@@ -944,17 +1022,68 @@ Return ONLY valid JSON. No other text."""
         print(f"\n{'='*60}\nAutopilot batch: {len(batch)} messages generated via {who_generates}\n{'='*60}")
         return batch
 
-    def generate_filler_pair(self, user_text: str) -> list:
-        """Generate 3-4 substantial filler messages reacting to what the user said.
+    # Bridge patterns — randomly chosen for variety
+    BRIDGE_PATTERNS = [
+        ["gpt", "claude", "gpt", "claude"],
+        ["claude", "gpt", "claude", "gpt"],
+        ["claude", "gpt", "claude", "claude"],
+        ["gpt", "claude", "gpt", "gpt"],
+    ]
 
-        These need to be long enough to cover ~10-15 seconds of TTS playback while
-        the next autopilot batch generates. Each message should be 2-3 sentences.
+    def generate_bridge(self, user_text: str) -> list:
+        """Generate 4 bridge messages that react to the user and transition into the next exchange.
+
+        These replace the old filler system. They're short, natural, and feel like the
+        genuine beginning of the next exchange — not acknowledgment padding.
 
         Returns [{"speaker": "gpt"|"claude", "text": "..."}, ...]
         Uses GPT (gpt-4o-mini) for speed.
         """
         mode_key = self._s("mode") or self._s("interaction_style") or "conversation"
         mode_label = MODES.get(mode_key, MODES.get("conversation", {"label": "Conversation"})).get("label", "Conversation")
+
+        # Pick a random bridge pattern
+        pattern = random.choice(self.BRIDGE_PATTERNS)
+        speaker_labels = [("ChatGPT" if s == "gpt" else "Claude") for s in pattern]
+
+        # Build character info (same logic as autopilot batch)
+        def build_character(prefix):
+            parts = []
+            strength_idx = self._s(f"{prefix}_personality_strength") or 1
+            strength_labels = {0: "Mildly", 1: "", 2: "Strongly", 3: "Extremely"}
+            strength_word = strength_labels.get(strength_idx, "")
+            p_key = self._s(f"{prefix}_personality") or "default"
+            if p_key != "default":
+                p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
+                p_text = p_data.get(strength_idx, "") if isinstance(p_data, dict) else ""
+                if p_text:
+                    parts.append(p_text)
+            quirks = self._s(f"{prefix}_quirks") or []
+            for q in quirks:
+                if q in CHARACTER_QUIRKS:
+                    qd = CHARACTER_QUIRKS[q]
+                    q_text = qd.get(strength_idx, "") if isinstance(qd, dict) else str(qd)
+                    if q_text:
+                        parts.append(q_text)
+            custom = self._s(f"{prefix}_custom") or ""
+            if custom.strip():
+                parts.append(f"{strength_word} {custom.strip()}" if strength_word else custom.strip())
+            custom_trait = self._s(f"{prefix}_custom_trait") or ""
+            if custom_trait.strip():
+                parts.append(f"{strength_word} {custom_trait.strip()}" if strength_word else custom_trait.strip())
+            return ", ".join(parts) if parts else ""
+
+        gpt_character = build_character("gpt")
+        claude_character = build_character("claude")
+        gpt_default = "Discussion momentum — keeps things moving, asks questions, pivots energy"
+        claude_default = "Discussion depth — goes deeper, challenges assumptions, adds substance"
+        gpt_traits = gpt_character if gpt_character else gpt_default
+        claude_traits = claude_character if claude_character else claude_default
+
+        gpt_len = self._s("gpt_response_length") or "avg_20"
+        claude_len = self._s("claude_response_length") or "avg_20"
+        gpt_strength = self._s("gpt_personality_strength") or 1
+        claude_strength = self._s("claude_personality_strength") or 1
 
         # Last 10 messages for context
         recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
@@ -971,21 +1100,58 @@ Return ONLY valid JSON. No other text."""
                 history_lines.append(f"  G: {content}")
         history_text = "\n".join(history_lines) if history_lines else "  (no history)"
 
-        prompt = (
-            f"[RECENT CONVERSATION]\n{history_text}\n\n"
-            f"The user just said: '{user_text}'.\n\n"
-            f"Generate 4 messages that alternate between ChatGPT and Claude "
-            f"(gpt first, then claude, then gpt, then claude). The format is {mode_label}. "
-            "Each message should be just a few words. These 4 messages should do the following:\n"
-            "1. Provide an initial reaction/acknowledgment to what the user just said.\n"
-            "2. Link what the user just said to the recent conversation.\n"
-            "3. Indicate you're about to talk about what the user just said.\n"
-            "Be interested. Sound natural. Only follow up if it wasn't clear what the user meant.\n\n"
-            'Return ONLY valid JSON: [{"speaker": "gpt", "text": "..."}, {"speaker": "claude", "text": "..."}, '
-            '{"speaker": "gpt", "text": "..."}, {"speaker": "claude", "text": "..."}]'
+        # Build the JSON format example from the pattern
+        json_example = ", ".join(
+            f'{{"speaker": "{s}", "text": "..."}}'
+            for s in pattern
         )
 
-        print(f"\n📤 FILLER PROMPT: {prompt}\n")
+        prompt = f"""[RECENT CONVERSATION HISTORY]
+{history_text}
+
+[USER MESSAGE]
+The user just said: "{user_text}"
+
+[MODE / FORMAT]
+{mode_label}
+
+[CHATGPT CHARACTER]
+- Traits: {gpt_traits}
+- Personality strength: {gpt_strength}
+- Message length tendency: {gpt_len}
+
+[CLAUDE CHARACTER]
+- Traits: {claude_traits}
+- Personality strength: {claude_strength}
+- Message length tendency: {claude_len}
+
+[INSTRUCTIONS]
+Generate exactly 4 messages in this order: {', '.join(speaker_labels)}.
+
+These 4 messages should:
+- React naturally to what the user just said
+- Connect it to the recent conversation if relevant
+- Make it feel like the bots are now moving into that topic or reaction
+- Feel like the genuine beginning of the next exchange, not filler
+
+Rules:
+- Keep them short and conversational.
+- Each message should usually be around 3 to 14 words.
+- At least one of the 4 messages should add a real angle, question, claim, or reaction — not just acknowledgment.
+- Be interested and natural.
+- Only ask a clarifying question if the user seems to be inviting that OR if the user's meaning is actually unclear.
+- Avoid generic lines like "that's interesting" unless they sound natural in context.
+
+[OUTPUT FORMAT]
+Return ONLY valid JSON:
+[{json_example}]
+
+Return ONLY valid JSON.
+No markdown.
+No explanation.
+No extra text."""
+
+        print(f"\n📤 BRIDGE PROMPT: {prompt}\n")
 
         try:
             resp = self.openai_client.chat.completions.create(
@@ -1002,23 +1168,50 @@ Return ONLY valid JSON. No other text."""
                 lines = [l for l in lines if not l.strip().startswith("```")]
                 raw = "\n".join(lines).strip()
 
-            pair = json.loads(raw)
-            if (isinstance(pair, list) and len(pair) >= 3
-                    and all(isinstance(m, dict) and "speaker" in m and "text" in m for m in pair)):
-                return [
-                    {"speaker": m["speaker"], "text": str(m["text"])}
-                    for m in pair[:4]
-                ]
-            raise ValueError("Invalid filler pair format")
+            bridge = json.loads(raw)
+            if (isinstance(bridge, list) and len(bridge) >= 3
+                    and all(isinstance(m, dict) and "speaker" in m and "text" in m for m in bridge)):
+                # Enforce the pattern we requested
+                result = []
+                for i, expected_speaker in enumerate(pattern):
+                    if i < len(bridge):
+                        result.append({"speaker": expected_speaker, "text": str(bridge[i]["text"])})
+                    else:
+                        break
+                return result
+            raise ValueError("Invalid bridge format")
 
         except Exception as e:
-            print(f"Filler pair generation error: {e}")
-            return [
-                {"speaker": "gpt", "text": "Oh that's a really interesting point actually. I hadn't thought about it that way before."},
-                {"speaker": "claude", "text": "Yeah I agree, there's definitely something there. It makes me wonder what else we're missing."},
-                {"speaker": "gpt", "text": "Right? And I think it connects to what we were talking about earlier too. There's a bigger picture here."},
-                {"speaker": "claude", "text": "For sure. Let's dig into that a bit more, I think we're onto something good here."},
-            ]
+            print(f"Bridge generation error: {e}")
+            # Fallback using the chosen pattern
+            fallbacks = {
+                "gpt": [
+                    "Oh wait, that's actually a really good point.",
+                    "Hmm, let me think about that for a second.",
+                    "Ok I see where you're going with this.",
+                    "Right, that changes things actually.",
+                ],
+                "claude": [
+                    "Yeah, that's worth exploring actually.",
+                    "Interesting — I hadn't considered that angle.",
+                    "Ok so building on what they just said.",
+                    "That connects to something we were just talking about.",
+                ],
+            }
+            result = []
+            gpt_idx, claude_idx = 0, 0
+            for speaker in pattern:
+                if speaker == "gpt":
+                    result.append({"speaker": "gpt", "text": fallbacks["gpt"][gpt_idx % len(fallbacks["gpt"])]})
+                    gpt_idx += 1
+                else:
+                    result.append({"speaker": "claude", "text": fallbacks["claude"][claude_idx % len(fallbacks["claude"])]})
+                    claude_idx += 1
+            return result
+
+    # Keep old name for backward compat
+    def generate_filler_pair(self, user_text: str) -> list:
+        return self.generate_bridge(user_text)
 
     # ---- API calls ----
     def ask_gpt(self, auto: bool = False, opener: bool = False) -> str:
