@@ -979,22 +979,40 @@ class TwoBotsEngine:
         first_speaker = "claude" if last_speaker in ("gpt", "user") else "gpt"
         first_speaker_instruction = f'The first message MUST be from {"Claude" if first_speaker == "claude" else "ChatGPT"}.'
 
-        # Pick a format-appropriate exchange type
-        structure_indices = tuning.FORMAT_STRUCTURES.get(mode_key)
-        if structure_indices is None:
-            # None means "random" or unknown format — pick from all
-            exchange_type = random.choice(tuning.EXCHANGE_TYPES)
-        else:
-            idx = random.choice(structure_indices)
-            exchange_type = tuning.EXCHANGE_TYPES[idx]
-        print(f"\n🎬 Exchange type: {exchange_type}\n")
+        # ---- CHAT MODE ---- Check if user spoke recently (within last 8 messages)
+        user_request = None
+        for m in reversed(self.state.gpt_msgs[-8:]):
+            if "[User]" in m.get("content", ""):
+                user_request = m["content"].replace("[User]: ", "")
+                break
 
-        # Format direction — first batch vs continuation
-        is_first_batch = self.state.autopilot_batch_count == 0
-        if is_first_batch:
-            format_direction = f"The [{mode_key.upper()}] format has not started yet. Announce it and set the rules or tone. For example if it's a debate, one bot proposes the structure. If it's an interview, one bot takes the interviewer role. If it's a conversation, just get into it naturally."
+        if user_request:
+            # User spoke recently — skip exchange type, focus on their request
+            print(f"\n🎬 User request detected: {user_request}\n")
+            creative_direction = f"""[CREATIVE DIRECTION]
+The user said: "{user_request}". You MUST create a relevant, corresponding script between the 2 bots that directly addresses and focuses on what the user asked for. Do NOT ignore or drift from the user's request."""
         else:
-            format_direction = f"Continue the [{mode_key.upper()}] format naturally from where the conversation left off."
+            # No recent user input — use normal exchange type system
+            structure_indices = tuning.FORMAT_STRUCTURES.get(mode_key)
+            if structure_indices is None:
+                exchange_type = random.choice(tuning.EXCHANGE_TYPES)
+            else:
+                idx = random.choice(structure_indices)
+                exchange_type = tuning.EXCHANGE_TYPES[idx]
+            print(f"\n🎬 Exchange type: {exchange_type}\n")
+
+            is_first_batch = self.state.autopilot_batch_count == 0
+            if is_first_batch:
+                format_direction = f"The [{mode_key.upper()}] format has not started yet. Announce it and set the rules or tone. For example if it's a debate, one bot proposes the structure. If it's an interview, one bot takes the interviewer role. If it's a conversation, just get into it naturally."
+            else:
+                format_direction = f"Continue the [{mode_key.upper()}] format naturally from where the conversation left off."
+
+            creative_direction = f"""[CREATIVE DIRECTION]
+The arc of THIS exchange:
+1. {format_direction}
+2. The [{mode_key.upper()}] then pivots toward: {exchange_type}
+3. The new direction takes hold and develops
+4. End with a hook that gives the next exchange somewhere to go"""
 
         # Increment batch counter
         self.state.autopilot_batch_count += 1
@@ -1028,12 +1046,7 @@ class TwoBotsEngine:
 
 {first_speaker_instruction}
 
-[CREATIVE DIRECTION]
-IF the user has requested something specific, you must obey the user. Otherwise, the arc of THIS exchange:
-1. {format_direction}
-2. The [{mode_key.upper()}] then pivots toward: {exchange_type}
-3. The new direction takes hold and develops
-4. End with a hook that gives the next exchange somewhere to go
+{creative_direction}
 
 [OUTPUT FORMAT]
 Return ONLY a JSON array of {num_messages} message objects.
