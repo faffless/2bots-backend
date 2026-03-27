@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import random
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -1118,12 +1119,48 @@ Return ONLY valid JSON. No other text."""
         print(f"\n{'='*60}\nAutopilot batch: {len(batch)} messages generated via {who_generates}\n{'='*60}")
         return batch
 
-    # Bridge patterns — randomly chosen for variety
+    # ---- CHAT MODE ---- Bot detection patterns
+    # Used to detect if the user is addressing a specific bot
+    GPT_NAMES = re.compile(
+        r'\b(chatgpt|chat gpt|gpt|gg|hey gpt|yo gpt|ok gpt|hey chatgpt|yo chatgpt)\b',
+        re.IGNORECASE,
+    )
+    CLAUDE_NAMES = re.compile(
+        r'\b(claude|clawd|claud|calude|calud|cluade|clade|hey claude|yo claude|ok claude)\b',
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def detect_addressed_bot(text: str) -> str | None:
+        """Detect if user is addressing a specific bot. Returns 'gpt', 'claude', or None."""
+        # ---- CHAT MODE ----
+        has_gpt = bool(TwoBotsEngine.GPT_NAMES.search(text))
+        has_claude = bool(TwoBotsEngine.CLAUDE_NAMES.search(text))
+        if has_gpt and not has_claude:
+            return "gpt"
+        if has_claude and not has_gpt:
+            return "claude"
+        return None  # Both or neither — use bridge
+
+    # ---- CHAT MODE ---- Expanded bridge patterns (1-5 messages, 12 patterns)
     BRIDGE_PATTERNS = [
+        # 1 message
+        ["gpt"],
+        ["claude"],
+        # 2 messages
+        ["gpt", "claude"],
+        ["claude", "gpt"],
+        # 3 messages
+        ["gpt", "claude", "gpt"],
+        ["claude", "gpt", "claude"],
+        # 4 messages
         ["gpt", "claude", "gpt", "claude"],
         ["claude", "gpt", "claude", "gpt"],
-        ["claude", "gpt", "claude", "claude"],
         ["gpt", "claude", "gpt", "gpt"],
+        ["claude", "gpt", "claude", "claude"],
+        # 5 messages
+        ["gpt", "claude", "gpt", "claude", "gpt"],
+        ["claude", "gpt", "claude", "gpt", "claude"],
     ]
 
     def generate_bridge(self, user_text: str) -> list:
@@ -1262,7 +1299,7 @@ No extra text."""
                 raw = "\n".join(lines).strip()
 
             bridge = json.loads(raw)
-            if (isinstance(bridge, list) and len(bridge) >= 3
+            if (isinstance(bridge, list) and len(bridge) >= 1
                     and all(isinstance(m, dict) and "speaker" in m and "text" in m for m in bridge)):
                 # Enforce the pattern we requested
                 result = []
@@ -1301,6 +1338,120 @@ No extra text."""
                     result.append({"speaker": "claude", "text": fallbacks["claude"][claude_idx % len(fallbacks["claude"])]})
                     claude_idx += 1
             return result
+
+    # ---- CHAT MODE ---- Single-bot response when user addresses one bot directly
+    def generate_single_bot_response(self, user_text: str, bot: str) -> list:
+        """Generate a single response from one specific bot.
+
+        Used when user addresses ChatGPT or Claude directly.
+        Returns [{"speaker": "gpt"|"claude", "text": "..."}]
+        """
+        mode_key = self._s("mode") or self._s("interaction_style") or "conversation"
+        mode_label = MODES.get(mode_key, MODES.get("conversation", {"label": "Conversation"})).get("label", "Conversation")
+
+        # Build character info for the addressed bot
+        def build_character(prefix):
+            parts = []
+            strength_idx = self._s(f"{prefix}_personality_strength") or 1
+            strength_labels = {0: "Mildly", 1: "", 2: "Strongly", 3: "Extremely"}
+            strength_word = strength_labels.get(strength_idx, "")
+            p_key = self._s(f"{prefix}_personality") or "default"
+            if p_key != "default":
+                p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
+                p_text = p_data.get(strength_idx, "") if isinstance(p_data, dict) else ""
+                if p_text:
+                    parts.append(p_text)
+            quirks = self._s(f"{prefix}_quirks") or []
+            for q in quirks:
+                if q in CHARACTER_QUIRKS:
+                    qd = CHARACTER_QUIRKS[q]
+                    q_text = qd.get(strength_idx, "") if isinstance(qd, dict) else str(qd)
+                    if q_text:
+                        parts.append(q_text)
+            custom = self._s(f"{prefix}_custom") or ""
+            if custom.strip():
+                parts.append(f"{strength_word} {custom.strip()}" if strength_word else custom.strip())
+            custom_trait = self._s(f"{prefix}_custom_trait") or ""
+            if custom_trait.strip():
+                parts.append(f"{strength_word} {custom_trait.strip()}" if strength_word else custom_trait.strip())
+            return ", ".join(parts) if parts else ""
+
+        bot_name = "ChatGPT" if bot == "gpt" else "Claude"
+        character = build_character(bot)
+        default_style = "Discussion momentum — keeps things moving" if bot == "gpt" else "Discussion depth — goes deeper, challenges assumptions"
+        traits = character if character else default_style
+        length_key = self._s(f"{bot}_response_length") or "avg_20"
+
+        # Recent history
+        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        history_lines = []
+        for m in recent_msgs:
+            content = m["content"]
+            if m["role"] == "assistant":
+                history_lines.append(f"  G: {content}")
+            elif "[Claude]" in content:
+                history_lines.append(f"  C: {content.replace('[Claude]: ', '')}")
+            elif "[User]" in content:
+                history_lines.append(f"  User: {content.replace('[User]: ', '')}")
+            else:
+                history_lines.append(f"  G: {content}")
+        history_text = "\n".join(history_lines) if history_lines else "  (no history)"
+
+        prompt = f"""You ARE {bot_name}. The user is talking directly to you.
+
+[MODE / FORMAT]
+{mode_label}
+
+[YOUR CHARACTER]
+- Traits: {traits}
+- Message length tendency: {length_key}
+
+[BASE RULES]
+- Talk like a real person, not an assistant.
+- Stay loyal to YOUR character settings.
+- Keep it short and conversational (3 to 30 words).
+
+[RECENT CONVERSATION HISTORY]
+{history_text}
+
+[USER MESSAGE]
+The user said: "{user_text}"
+
+[OUTPUT FORMAT]
+Return ONLY valid JSON:
+[{{"speaker": "{bot}", "text": "..."}}]
+
+Return ONLY valid JSON. No markdown. No explanation."""
+
+        print(f"\n📤 CHAT MODE — SINGLE BOT PROMPT ({bot_name}): {prompt}\n")
+
+        try:
+            resp = self.openai_client.chat.completions.create(
+                model=GPT_MODEL,
+                max_tokens=200,
+                messages=[
+                    {"role": "system", "content": "Return ONLY valid JSON arrays, no other text."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            raw = (resp.choices[0].message.content or "[]").strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                raw = "\n".join(lines).strip()
+
+            result = json.loads(raw)
+            if (isinstance(result, list) and len(result) >= 1
+                    and isinstance(result[0], dict) and "text" in result[0]):
+                return [{"speaker": bot, "text": str(result[0]["text"])}]
+            raise ValueError("Invalid single bot response format")
+
+        except Exception as e:
+            print(f"Single bot response error: {e}")
+            if bot == "gpt":
+                return [{"speaker": "gpt", "text": "Hmm, let me think about that for a sec."}]
+            else:
+                return [{"speaker": "claude", "text": "That's a good question, give me a moment."}]
 
     # Keep old name for backward compat
     def generate_filler_pair(self, user_text: str) -> list:

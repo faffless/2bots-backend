@@ -466,22 +466,33 @@ async def autopilot_prefetch(request: Request, req: AutopilotRequest):
 @app.post("/filler/stream")
 @limiter.limit("20/minute")
 async def filler_stream(request: Request, req: FillerRequest):
-    """Generate and stream 2 quick filler/acknowledgment messages after user speaks.
-    Used as a buffer while the other AI generates the next autopilot batch."""
+    """---- CHAT MODE ---- Generate and stream response to user input.
+    Detects if user is addressing a specific bot (single response) or
+    both (bridge with 1-5 messages). Sends chat_mode flag in 'done' event
+    so frontend knows whether to wait or launch autopilot."""
     log("filler", f"User spoke in {req.session_id[:8]}...: '{req.user_text[:50]}...'")
     engine = get_engine(req.session_id)
 
     # Add user message to history
     engine.add_message("user", req.user_text)
 
-    # Generate the filler pair (blocking call in thread)
-    pair = await asyncio.to_thread(engine.generate_filler_pair, req.user_text)
+    # ---- CHAT MODE ---- Detect if user is addressing a specific bot
+    addressed_bot = engine.detect_addressed_bot(req.user_text)
+
+    if addressed_bot:
+        # Single bot response
+        log("chat_mode", f"User addressed {addressed_bot} directly")
+        messages = await asyncio.to_thread(engine.generate_single_bot_response, req.user_text, addressed_bot)
+    else:
+        # Bridge response (1-5 messages)
+        log("chat_mode", "User addressed both bots — using bridge")
+        messages = await asyncio.to_thread(engine.generate_bridge, req.user_text)
 
     async def generate():
         gpt_voice = engine.get_gpt_voice()
         claude_voice = engine.get_claude_voice()
 
-        for msg in pair:
+        for msg in messages:
             speaker = msg["speaker"]
             text = msg["text"]
             voice = gpt_voice if speaker == "gpt" else claude_voice
@@ -497,7 +508,8 @@ async def filler_stream(request: Request, req: FillerRequest):
             })
 
         save_messages_only(req.session_id, engine)
-        yield sse({"type": "done", "filler": True})
+        # ---- CHAT MODE ---- Tell frontend this is chat mode — wait for user before autopilot
+        yield sse({"type": "done", "filler": True, "chat_mode": True})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
