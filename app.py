@@ -16,11 +16,14 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 import tuning
 from engine import (
@@ -53,7 +56,17 @@ def log(category: str, msg: str, **extra):
     extra_str = "".join(f" {k}={v}" for k, v in extra.items()) if extra else ""
     print(f"[{entry['ts']}] [{category}]{extra_str} {msg}")
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="2BOTS Backend v2")
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"error": "rate_limited", "detail": f"Rate limit exceeded: {exc.detail}"},
+    )
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -310,7 +323,8 @@ def get_voices():
 
 
 @app.post("/start/stream")
-async def start_stream(req: StartRequest):
+@limiter.limit("5/minute")
+async def start_stream(request: Request, req: StartRequest):
     """First round — AIs introduce themselves naturally."""
     import random as _rand
     sid = str(uuid.uuid4())
@@ -377,7 +391,8 @@ async def start_stream(req: StartRequest):
 
 
 @app.post("/turn/stream")
-async def turn_stream(req: TurnRequest):
+@limiter.limit("10/minute")
+async def turn_stream(request: Request, req: TurnRequest):
     engine = get_engine(req.session_id)
     clean = (req.text or "").strip()
     if not clean:
@@ -393,7 +408,8 @@ async def turn_stream(req: TurnRequest):
 
 
 @app.post("/autopilot/stream")
-async def autopilot_stream(req: AutopilotRequest):
+@limiter.limit("10/minute")
+async def autopilot_stream(request: Request, req: AutopilotRequest):
     """Generate and stream a batch of 10-14 messages in autopilot mode.
     Uses prefetch cache if available, otherwise generates fresh."""
     sid = req.session_id
@@ -420,7 +436,8 @@ async def autopilot_stream(req: AutopilotRequest):
 
 
 @app.post("/autopilot/prefetch")
-async def autopilot_prefetch(req: AutopilotRequest):
+@limiter.limit("10/minute")
+async def autopilot_prefetch(request: Request, req: AutopilotRequest):
     """Pre-generate an autopilot batch and cache it. No TTS, no streaming.
     Called early (e.g. during opener playback) so the batch is ready when needed."""
     sid = req.session_id
@@ -447,7 +464,8 @@ async def autopilot_prefetch(req: AutopilotRequest):
 
 
 @app.post("/filler/stream")
-async def filler_stream(req: FillerRequest):
+@limiter.limit("20/minute")
+async def filler_stream(request: Request, req: FillerRequest):
     """Generate and stream 2 quick filler/acknowledgment messages after user speaks.
     Used as a buffer while the other AI generates the next autopilot batch."""
     log("filler", f"User spoke in {req.session_id[:8]}...: '{req.user_text[:50]}...'")
@@ -485,7 +503,8 @@ async def filler_stream(req: FillerRequest):
 
 
 @app.post("/settings/update")
-async def update_settings(req: SettingsUpdate):
+@limiter.limit("20/minute")
+async def update_settings(request: Request, req: SettingsUpdate):
     changed = {k: v for k, v in req.settings.items()
                if SESSIONS.get(req.session_id, {}).get("settings", {}).get(k) != v}
     log("settings", f"Update for {req.session_id[:8]}...",
