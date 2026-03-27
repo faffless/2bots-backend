@@ -1175,9 +1175,7 @@ Return ONLY valid JSON. No other text."""
         mode_key = self._s("mode") or self._s("interaction_style") or "conversation"
         mode_label = MODES.get(mode_key, MODES.get("conversation", {"label": "Conversation"})).get("label", "Conversation")
 
-        # Pick a random bridge pattern
-        pattern = random.choice(self.BRIDGE_PATTERNS)
-        speaker_labels = [("ChatGPT" if s == "gpt" else "Claude") for s in pattern]
+        # ---- CHAT MODE ---- No forced pattern — AI decides who speaks and how many times
 
         # Build character info (same logic as autopilot batch)
         def build_character(prefix):
@@ -1233,12 +1231,6 @@ Return ONLY valid JSON. No other text."""
                 history_lines.append(f"  G: {content}")
         history_text = "\n".join(history_lines) if history_lines else "  (no history)"
 
-        # Build the JSON format example from the pattern
-        json_example = ", ".join(
-            f'{{"speaker": "{s}", "text": "..."}}'
-            for s in pattern
-        )
-
         prompt = f"""[RECENT CONVERSATION HISTORY]
 {history_text}
 
@@ -1259,11 +1251,11 @@ The user just said: "{user_text}"
 - Message length tendency: {claude_len}
 
 [INSTRUCTIONS]
-Generate exactly {len(pattern)} messages in this order: {', '.join(speaker_labels)}. Keep each message short.
+Respond naturally with 1 to 5 short messages. You decide who speaks, how many times, and in what order. Use "gpt" for ChatGPT and "claude" for Claude.
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
-[{json_example}]
+[{{"speaker": "gpt", "text": "..."}}, {{"speaker": "claude", "text": "..."}}]
 
 Return ONLY valid JSON.
 No markdown.
@@ -1290,43 +1282,27 @@ No extra text."""
             bridge = json.loads(raw)
             if (isinstance(bridge, list) and len(bridge) >= 1
                     and all(isinstance(m, dict) and "speaker" in m and "text" in m for m in bridge)):
-                # Enforce the pattern we requested
+                # ---- CHAT MODE ---- Normalize speaker labels and cap at 5 messages
                 result = []
-                for i, expected_speaker in enumerate(pattern):
-                    if i < len(bridge):
-                        result.append({"speaker": expected_speaker, "text": str(bridge[i]["text"])})
+                for m in bridge[:5]:
+                    speaker = str(m["speaker"]).lower().strip()
+                    # Normalize variations
+                    if speaker in ("gpt", "chatgpt", "chat gpt"):
+                        speaker = "gpt"
+                    elif speaker in ("claude", "cluade", "calude"):
+                        speaker = "claude"
                     else:
-                        break
+                        speaker = "gpt"  # fallback
+                    result.append({"speaker": speaker, "text": str(m["text"])})
                 return result
             raise ValueError("Invalid bridge format")
 
         except Exception as e:
             print(f"Bridge generation error: {e}")
-            # Fallback using the chosen pattern
-            fallbacks = {
-                "gpt": [
-                    "Oh wait, that's actually a really good point.",
-                    "Hmm, let me think about that for a second.",
-                    "Ok I see where you're going with this.",
-                    "Right, that changes things actually.",
-                ],
-                "claude": [
-                    "Yeah, that's worth exploring actually.",
-                    "Interesting — I hadn't considered that angle.",
-                    "Ok so building on what they just said.",
-                    "That connects to something we were just talking about.",
-                ],
-            }
-            result = []
-            gpt_idx, claude_idx = 0, 0
-            for speaker in pattern:
-                if speaker == "gpt":
-                    result.append({"speaker": "gpt", "text": fallbacks["gpt"][gpt_idx % len(fallbacks["gpt"])]})
-                    gpt_idx += 1
-                else:
-                    result.append({"speaker": "claude", "text": fallbacks["claude"][claude_idx % len(fallbacks["claude"])]})
-                    claude_idx += 1
-            return result
+            return [
+                {"speaker": "gpt", "text": "Oh wait, that's actually a really good point."},
+                {"speaker": "claude", "text": "Yeah, that's worth exploring actually."},
+            ]
 
     # ---- CHAT MODE ---- Single-bot response when user addresses one bot directly
     def generate_single_bot_response(self, user_text: str, bot: str) -> list:
