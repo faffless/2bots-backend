@@ -1029,7 +1029,7 @@ class TwoBotsEngine:
 {first_speaker_instruction}
 
 [CREATIVE DIRECTION]
-The arc of THIS exchange:
+IF the user has requested something specific, you must obey the user. Otherwise, the arc of THIS exchange:
 1. {format_direction}
 2. The [{mode_key.upper()}] then pivots toward: {exchange_type}
 3. The new direction takes hold and develops
