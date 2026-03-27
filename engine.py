@@ -1231,7 +1231,9 @@ Return ONLY valid JSON. No other text."""
                 history_lines.append(f"  G: {content}")
         history_text = "\n".join(history_lines) if history_lines else "  (no history)"
 
-        prompt = f"""[RECENT CONVERSATION HISTORY]
+        prompt = f"""You are writing an extremely entertaining script for an interaction between two AI bots who are about to let the user speak.
+
+[RECENT CONVERSATION HISTORY]
 {history_text}
 
 [USER MESSAGE]
@@ -1251,7 +1253,17 @@ The user just said: "{user_text}"
 - Message length tendency: {claude_len}
 
 [INSTRUCTIONS]
-Respond naturally with 1 to 5 short messages. You decide who speaks, how many times, and in what order. Use "gpt" for ChatGPT and "claude" for Claude. At least one message should engage the user directly — ask them something, invite their opinion, or react to them by name ("you" or "the user").
+Generate a natural-sounding mini conversation or even singular reaction — it can be 1 or 2 or 3 or 4 or 5 total messages.
+
+Format:
+- Use "gpt" for ChatGPT and "claude" for Claude as speaker labels.
+- Use only those two speaker labels.
+- Decide the number of turns, speaker order, and who starts. Feel free to choose just ONE message from one of the labels.
+
+Requirements:
+- Messages should be short, conversational, and distinct in voice.
+- At least one message must directly engage the user by asking them something, inviting their view, or responding to them personally.
+- Avoid filler and repetition.
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
