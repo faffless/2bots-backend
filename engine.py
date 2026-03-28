@@ -307,6 +307,27 @@ MODES = {
 # Keep old name for backward compat with imports
 INTERACTION_STYLES = MODES
 
+# ---- Format Roles (maps format → screenwriter role + content type) ----
+FORMAT_ROLES = {
+    "conversation":    {"role": "SCREENWRITER",    "content": "DIALOGUE"},
+    "debate":          {"role": "DEBATE WRITER",   "content": "DIALOGUE"},
+    "roleplay":        {"role": "SCREENWRITER",    "content": "SCENE"},
+    "bedtime_story":   {"role": "STORYTELLER",     "content": "STORY"},
+    "comedy":          {"role": "COMEDIAN",         "content": "COMEDY SKETCH"},
+    "interview":       {"role": "INTERVIEWER",      "content": "INTERVIEW"},
+    "philosophy":      {"role": "PHILOSOPHER",      "content": "DIALOGUE"},
+    "movie_dialogue":  {"role": "SCREENWRITER",    "content": "MOVIE SCENE"},
+    "research":        {"role": "RESEARCHER",       "content": "DISCUSSION"},
+    "game":            {"role": "GAME DESIGNER",    "content": "GAME SESSION"},
+    "problem_solving": {"role": "PROBLEM SOLVER",   "content": "DISCUSSION"},
+    "brainstorming":   {"role": "CREATIVE DIRECTOR","content": "BRAINSTORM"},
+    "teach_me":        {"role": "TEACHER",          "content": "LESSON"},
+    "advice":          {"role": "ADVISOR",           "content": "ADVICE SESSION"},
+    "decision_help":   {"role": "ADVISOR",           "content": "DECISION SESSION"},
+    "designing":       {"role": "DESIGNER",          "content": "DESIGN SESSION"},
+    "weird":           {"role": "ABSURDIST WRITER", "content": "WHATEVER THIS IS"},
+}
+
 # ---- Personalities ----
 PERSONALITIES = {
     "default": {0: "", 1: "", 2: "", 3: ""},
@@ -1017,36 +1038,49 @@ The arc of THIS exchange:
         # Increment batch counter
         self.state.autopilot_batch_count += 1
 
-        # Build character sections — only include if they have traits
-        gpt_word_desc = f"Randomize each message length between 1 and {gpt_word_limit} words."
-        claude_word_desc = f"Randomize each message length between 1 and {claude_word_limit} words."
-        gpt_default_style = "Discussion momentum — keeps things moving, asks questions, pivots energy"
-        claude_default_style = "Discussion depth — goes deeper, challenges assumptions, adds substance"
+        # Build character descriptions with strength words
+        strength_idx_gpt = self._s("gpt_personality_strength") or 1
+        strength_idx_claude = self._s("claude_personality_strength") or 1
+        strength_words = {0: "slightly", 1: "", 2: "very", 3: "extremely"}
+        gpt_strength_word = strength_words.get(strength_idx_gpt, "")
+        claude_strength_word = strength_words.get(strength_idx_claude, "")
+
+        gpt_default_style = "keeps things moving, asks questions, pivots energy"
+        claude_default_style = "goes deeper, challenges assumptions, adds substance"
         gpt_traits = gpt_character if gpt_character else gpt_default_style
         claude_traits = claude_character if claude_character else claude_default_style
-        gpt_char_section = f"\n[ChatGPT's CHARACTER]\n- Traits: {gpt_traits}\n- {gpt_word_desc}"
-        claude_char_section = f"\n[Claude's CHARACTER]\n- Traits: {claude_traits}\n- {claude_word_desc}"
+
+        # Format-dependent role
+        format_role_data = FORMAT_ROLES.get(mode_key, FORMAT_ROLES["conversation"])
+        role_name = format_role_data["role"]
+        content_type = format_role_data["content"]
 
         # Build the prompt
-        prompt = f"""You are writing an extremely entertaining script for an interaction between two AI bots.
+        prompt = f"""ROLE:
+YOU ARE AN EXTREMELY TALENTED {role_name} WHO WRITES BRILLIANT {content_type}S.
 
-[FORMAT] {mode_data['prompt']}
+SETTING:
+{mode_data['prompt']}
 {topic_line}
 {agree_section}
-{gpt_char_section}
-{claude_char_section}
 
-[BASE RULES]
-- Talk like humans. Include natural short reactions (2-5 words) and hesitations ("um", "uh", "well...")
-- Vary message lengths naturally
-- Each bot stays loyal to THEIR OWN character traits
+CHARACTERS:
+"G" is {f"a {gpt_strength_word} " if gpt_strength_word else ""}{gpt_traits}.
+"C" is {f"a {claude_strength_word} " if claude_strength_word else ""}{claude_traits}.
+"U" is the user — a real person listening.
 
-[RECENT CONVERSATION HISTORY]
+CONVERSATION HISTORY:
 {history_text}
 
 {first_speaker_instruction}
 
 {creative_direction}
+
+INSTRUCTIONS:
+Write a multi-exchange {content_type.lower()} ~200 words between C & G.
+
+RULES:
+C & G must both naturally {"discuss" if mode_key in ("conversation", "research", "problem_solving", "philosophy") else "debate" if mode_key == "debate" else "roleplay" if mode_key == "roleplay" else "perform" if mode_key in ("comedy", "movie_dialogue") else "explore" if mode_key in ("brainstorming", "designing") else "engage with"} the topic in the context of recent conversation history, the setting, and their character traits.
 
 [OUTPUT FORMAT]
 Return ONLY a JSON array of {num_messages} message objects.
@@ -1063,11 +1097,12 @@ Return ONLY valid JSON. No other text."""
 
         # ---- Make the API call ----
         try:
+            system_msg = f"You are an extremely talented {role_name.lower()}. Return ONLY valid JSON arrays."
             if who_generates == "claude":
                 resp = self.claude_client.messages.create(
                     model=CLAUDE_MODEL,
                     max_tokens=tuning.AUTOPILOT_MAX_TOKENS,
-                    system="You are a brilliant script writer. You design engaging, surprising, natural-sounding exchanges between two characters.",
+                    system=system_msg,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 raw = resp.content[0].text if resp.content else "[]"
@@ -1076,7 +1111,7 @@ Return ONLY valid JSON. No other text."""
                     model=GPT_MODEL,
                     max_tokens=tuning.AUTOPILOT_MAX_TOKENS,
                     messages=[
-                        {"role": "system", "content": "You are a brilliant script writer. You design engaging, surprising, natural-sounding exchanges between two characters."},
+                        {"role": "system", "content": system_msg},
                         {"role": "user", "content": prompt},
                     ],
                 )
@@ -1244,39 +1279,45 @@ Return ONLY valid JSON. No other text."""
                 history_lines.append(f"  G: {content}")
         history_text = "\n".join(history_lines) if history_lines else "  (no history)"
 
-        prompt = f"""You are writing an extremely entertaining script for an interaction between two AI bots who are about to let the user speak.
+        # Format-dependent role
+        mode_key_bridge = self._s("mode") or "conversation"
+        real_modes = [k for k in MODES if k not in ("random", "mix")]
+        if mode_key_bridge in ("random", "mix"):
+            mode_key_bridge = random.choice(real_modes)
+        format_role_data = FORMAT_ROLES.get(mode_key_bridge, FORMAT_ROLES["conversation"])
+        role_name = format_role_data["role"]
+        content_type = format_role_data["content"]
 
-[RECENT CONVERSATION HISTORY]
-{history_text}
+        # Character strength words
+        strength_words = {0: "slightly", 1: "", 2: "very", 3: "extremely"}
+        gpt_sw = strength_words.get(gpt_strength, "")
+        claude_sw = strength_words.get(claude_strength, "")
 
-[USER MESSAGE]
-The user just said: "{user_text}"
+        prompt = f"""ROLE:
+YOU ARE AN EXTREMELY TALENTED {role_name} WHO WRITES BRILLIANT {content_type}S.
 
-[MODE / FORMAT]
+SETTING:
 {mode_label}
 
-[CHATGPT CHARACTER]
-- Traits: {gpt_traits}
-- Personality strength: {gpt_strength}
-- Message length tendency: {gpt_len}
+CHARACTERS:
+"G" is {f"a {gpt_sw} " if gpt_sw else ""}{gpt_traits}.
+"C" is {f"a {claude_sw} " if claude_sw else ""}{claude_traits}.
+"U" is the user — a real person in the conversation.
 
-[CLAUDE CHARACTER]
-- Traits: {claude_traits}
-- Personality strength: {claude_strength}
-- Message length tendency: {claude_len}
+CONVERSATION HISTORY:
+{history_text}
 
-[INSTRUCTIONS]
-Generate a natural-sounding mini conversation or even singular reaction — it can be 1 or 2 or 3 or 4 or 5 total messages and should be around 50 words total.
+U JUST SAID: "{user_text}"
+
+INSTRUCTIONS:
+Generate a natural-sounding mini conversation — it can be 1 or 2 or 3 or 4 or 5 total messages, ~60 words total.
 
 Format:
 - Use "gpt" for ChatGPT and "claude" for Claude as speaker labels.
-- Use only those two speaker labels.
-- Decide the number of turns, speaker order, and who starts. Feel free to choose just ONE message from one of the labels.
+- Decide the number of turns, speaker order, and who starts.
 
-Requirements:
-- Focus specifically on what the USER said. Messages should be short, conversational, and distinct in voice.
-- At least one message must directly engage the user by asking them something, inviting their view, or responding to them personally.
-- Avoid filler and repetition.
+RULES:
+C & G MUST BOTH NATURALLY REACT TO THIS MESSAGE BY U: "{user_text}" IN THE CONTEXT OF RECENT CONVERSATION HISTORY, THE SETTING AND THEIR CHARACTER TRAITS.
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
