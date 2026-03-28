@@ -1064,7 +1064,7 @@ The arc of THIS exchange:
 
         # Build the prompt
         prompt = f"""ROLE:
-YOU ARE AN EXTREMELY TALENTED {role_name} WHO WRITES BRILLIANT {content_type}S.
+YOU ARE AN EXTREMELY TALENTED {role_name}.
 
 SETTING:
 {mode_data['prompt']}
@@ -1083,16 +1083,14 @@ CONVERSATION HISTORY:
 
 {creative_direction}
 
-INSTRUCTIONS:
-Write a multi-exchange {content_type.lower()} between C & G. Vary message lengths. Some messages should be 3-5 words, others up to 30. Mix it up.
-
-RULES:
-C & G must both naturally {"discuss" if mode_key in ("conversation", "research", "problem_solving", "philosophy") else "debate" if mode_key == "debate" else "roleplay" if mode_key == "roleplay" else "perform" if mode_key in ("comedy", "movie_dialogue") else "explore" if mode_key in ("brainstorming", "designing") else "engage with"} the topic in the context of recent conversation history, the setting, and their character traits.
+WRITE THE NEXT {num_messages} LINES OF DIALOGUE.
+Be unpredictable. Vary everything — length, tone, pacing, who dominates.
+Some lines should be 2 words. Some 20. Very rarely 50.
+Let them interrupt, repeat, trail off, go on tangents, circle back.
 
 [OUTPUT FORMAT]
 Return ONLY a JSON array of {num_messages} message objects.
 Each object: {{"speaker": "gpt" or "claude", "text": "..."}}
-Mostly alternate speakers. Occasionally one bot can double-message for a quick follow-up.
 Return ONLY valid JSON. No other text."""
 
         # ---- Log the full prompt ----
@@ -1301,7 +1299,7 @@ Return ONLY valid JSON. No other text."""
         claude_sw = strength_words.get(claude_strength, "")
 
         prompt = f"""ROLE:
-YOU ARE AN EXTREMELY TALENTED {role_name} WHO WRITES BRILLIANT {content_type}S.
+YOU ARE AN EXTREMELY TALENTED {role_name}.
 
 SETTING:
 {mode_label}
@@ -1316,24 +1314,18 @@ CONVERSATION HISTORY:
 
 THE USER JUST SAID: "{user_text}"
 
-INSTRUCTIONS:
-Generate a natural-sounding mini conversation — it can be 1 or 2 or 3 or 4 or 5 total messages, ~60 words total.
+WRITE 1 TO 5 LINES REACTING TO WHAT THE USER SAID.
+Be unpredictable. Vary length and tone.
+Some lines should be 2 words. Some 20. Very rarely 50.
+Let them interrupt, repeat, trail off, go on tangents.
 
-Format:
-- Use "gpt" for ChatGPT and "claude" for Claude as speaker labels.
-- Decide the number of turns, speaker order, and who starts.
-
-RULES:
-C & G MUST BOTH NATURALLY REACT TO WHAT THE USER JUST SAID IN THE CONTEXT OF RECENT CONVERSATION HISTORY, THE SETTING AND THEIR CHARACTER TRAITS.
+Use "gpt" and "claude" as speaker labels.
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
 [{{"speaker": "gpt", "text": "..."}}, {{"speaker": "claude", "text": "..."}}]
 
-Return ONLY valid JSON.
-No markdown.
-No explanation.
-No extra text."""
+Return ONLY valid JSON. No markdown. No explanation."""
 
         print(f"\n📤 BRIDGE PROMPT: {prompt}\n")
 
