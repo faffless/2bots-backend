@@ -471,6 +471,12 @@ async def filler_stream(request: Request, req: FillerRequest):
     both (bridge with 1-5 messages). Sends chat_mode flag in 'done' event
     so frontend knows whether to wait or launch autopilot."""
     log("filler", f"User spoke in {req.session_id[:8]}...: '{req.user_text[:50]}...'")
+
+    # ---- CHAT MODE ---- Invalidate prefetch cache — user spoke, so any cached batch is stale
+    if req.session_id in PREFETCH_CACHE:
+        log("chat_mode", f"Clearing stale prefetch cache for {req.session_id[:8]}... (user spoke)")
+        del PREFETCH_CACHE[req.session_id]
+
     engine = get_engine(req.session_id)
 
     # Add user message to history
