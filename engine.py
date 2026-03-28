@@ -1084,7 +1084,7 @@ CONVERSATION HISTORY:
 {creative_direction}
 
 INSTRUCTIONS:
-Write a multi-exchange {content_type.lower()} between C & G. ~200 words total.
+Write a multi-exchange {content_type.lower()} between C & G. Vary message lengths. Some messages should be 3-5 words, others up to 30. Mix it up.
 
 RULES:
 C & G must both naturally {"discuss" if mode_key in ("conversation", "research", "problem_solving", "philosophy") else "debate" if mode_key == "debate" else "roleplay" if mode_key == "roleplay" else "perform" if mode_key in ("comedy", "movie_dialogue") else "explore" if mode_key in ("brainstorming", "designing") else "engage with"} the topic in the context of recent conversation history, the setting, and their character traits.
