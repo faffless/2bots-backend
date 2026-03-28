@@ -911,7 +911,14 @@ class TwoBotsEngine:
 
         # Topic
         topic = self._s("topic") or "random"
-        topic_line = "" if topic.lower() == "random" else f"\n[TOPIC] The conversation should be about: {topic}. Stay on this topic."
+        # Topic line — if random + immersive format, tell AI to pick a scenario
+        immersive_formats = ("roleplay", "bedtime_story", "game", "movie_dialogue", "comedy")
+        if topic.lower() == "random" and mode_key in immersive_formats:
+            topic_line = f"\n[TOPIC] No topic given — you MUST pick a specific, fun, creative scenario for this {mode_key.replace('_', ' ')}. Do NOT default to talking about AI or being bots."
+        elif topic.lower() == "random":
+            topic_line = ""
+        else:
+            topic_line = f"\n[TOPIC] The conversation should be about: {topic}. Stay on this topic."
 
         # Build merged character description for each bot
         def build_character(prefix: str) -> str:
@@ -1077,7 +1084,7 @@ CONVERSATION HISTORY:
 {creative_direction}
 
 INSTRUCTIONS:
-Write a multi-exchange {content_type.lower()} ~200 words between C & G.
+Write a multi-exchange {content_type.lower()} between C & G. 200 words TOTAL across ALL messages. Keep each individual message under 25 words.
 
 RULES:
 C & G must both naturally {"discuss" if mode_key in ("conversation", "research", "problem_solving", "philosophy") else "debate" if mode_key == "debate" else "roleplay" if mode_key == "roleplay" else "perform" if mode_key in ("comedy", "movie_dialogue") else "explore" if mode_key in ("brainstorming", "designing") else "engage with"} the topic in the context of recent conversation history, the setting, and their character traits.
