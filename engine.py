@@ -1015,32 +1015,12 @@ class TwoBotsEngine:
                 break
 
         if user_request:
-            # User spoke recently — skip exchange type, focus on their request
+            # User spoke recently — focus on their request
             print(f"\n🎬 User request detected: {user_request}\n")
-            creative_direction = f"""[CREATIVE DIRECTION]
-The user said: "{user_request}". You MUST create a relevant, corresponding script between the 2 bots that directly addresses and focuses on what the user asked for. Do NOT ignore or drift from the user's request."""
+            creative_direction = f"""The user said: "{user_request}". Focus on what the user asked for."""
         else:
-            # No recent user input — use normal exchange type system
-            structure_indices = tuning.FORMAT_STRUCTURES.get(mode_key)
-            if structure_indices is None:
-                exchange_type = random.choice(tuning.EXCHANGE_TYPES)
-            else:
-                idx = random.choice(structure_indices)
-                exchange_type = tuning.EXCHANGE_TYPES[idx]
-            print(f"\n🎬 Exchange type: {exchange_type}\n")
-
-            is_first_batch = self.state.autopilot_batch_count == 0
-            if is_first_batch:
-                format_direction = f"The [{mode_key.upper()}] format has not started yet. Announce it and set the rules or tone. For example if it's a debate, one bot proposes the structure. If it's an interview, one bot takes the interviewer role. If it's a conversation, just get into it naturally."
-            else:
-                format_direction = f"Continue the [{mode_key.upper()}] format naturally from where the conversation left off."
-
-            creative_direction = f"""[CREATIVE DIRECTION]
-The arc of THIS exchange:
-1. {format_direction}
-2. The [{mode_key.upper()}] then pivots toward: {exchange_type}
-3. The new direction takes hold and develops
-4. End with a hook that gives the next exchange somewhere to go"""
+            # No recent user input — just continue naturally
+            creative_direction = ""
 
         # Increment batch counter
         self.state.autopilot_batch_count += 1
@@ -1083,10 +1063,9 @@ CONVERSATION HISTORY:
 
 {creative_direction}
 
-WRITE THE NEXT {num_messages} LINES OF DIALOGUE.
-Be unpredictable. Vary everything — length, tone, pacing, who dominates.
+WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS INTERACTION.
+THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
 Some lines should be 2 words. Some 20. Very rarely 50.
-Let them interrupt, repeat, trail off, go on tangents, circle back.
 
 [OUTPUT FORMAT]
 Return ONLY a JSON array of {num_messages} message objects.
