@@ -309,23 +309,23 @@ INTERACTION_STYLES = MODES
 
 # ---- Format Roles (maps format → screenwriter role + content type) ----
 FORMAT_ROLES = {
-    "conversation":    {"role": "SCREENWRITER",    "content": "DIALOGUE"},
-    "debate":          {"role": "DEBATE WRITER",   "content": "DIALOGUE"},
-    "roleplay":        {"role": "SCREENWRITER",    "content": "SCENE"},
-    "bedtime_story":   {"role": "STORYTELLER",     "content": "STORY"},
-    "comedy":          {"role": "COMEDIAN",         "content": "COMEDY SKETCH"},
-    "interview":       {"role": "INTERVIEWER",      "content": "INTERVIEW"},
-    "philosophy":      {"role": "PHILOSOPHER",      "content": "DIALOGUE"},
-    "movie_dialogue":  {"role": "SCREENWRITER",    "content": "MOVIE SCENE"},
-    "research":        {"role": "RESEARCHER",       "content": "DISCUSSION"},
-    "game":            {"role": "GAME DESIGNER",    "content": "GAME SESSION"},
-    "problem_solving": {"role": "PROBLEM SOLVER",   "content": "DISCUSSION"},
-    "brainstorming":   {"role": "CREATIVE DIRECTOR","content": "BRAINSTORM"},
-    "teach_me":        {"role": "TEACHER",          "content": "LESSON"},
-    "advice":          {"role": "ADVISOR",           "content": "ADVICE SESSION"},
-    "decision_help":   {"role": "ADVISOR",           "content": "DECISION SESSION"},
-    "designing":       {"role": "DESIGNER",          "content": "DESIGN SESSION"},
-    "weird":           {"role": "ABSURDIST WRITER", "content": "WHATEVER THIS IS"},
+    "conversation":    {"role": "SCREENWRITER",    "content": "DIALOGUE",         "interaction": "CONVERSATION"},
+    "debate":          {"role": "DEBATE WRITER",   "content": "DIALOGUE",         "interaction": "DEBATE"},
+    "roleplay":        {"role": "SCREENWRITER",    "content": "SCENE",            "interaction": "SCENE — STAY IN CHARACTER, ACT IT OUT"},
+    "bedtime_story":   {"role": "STORYTELLER",     "content": "STORY",            "interaction": "STORYTELLING — NARRATE, BUILD THE SCENE, DO VOICES"},
+    "comedy":          {"role": "COMEDIAN",         "content": "COMEDY SKETCH",   "interaction": "COMEDY — JOKES, BITS, PUNCHLINES"},
+    "interview":       {"role": "INTERVIEWER",      "content": "INTERVIEW",       "interaction": "INTERVIEW — ONE ASKS, ONE ANSWERS"},
+    "philosophy":      {"role": "PHILOSOPHER",      "content": "DIALOGUE",        "interaction": "PHILOSOPHICAL EXCHANGE"},
+    "movie_dialogue":  {"role": "SCREENWRITER",    "content": "MOVIE SCENE",      "interaction": "MOVIE SCENE — CINEMATIC, DRAMATIC, IN CHARACTER"},
+    "research":        {"role": "RESEARCHER",       "content": "DISCUSSION",      "interaction": "RESEARCH DISCUSSION"},
+    "game":            {"role": "GAME DESIGNER",    "content": "GAME SESSION",    "interaction": "GAME — PLAY THE GAME, TAKE TURNS"},
+    "problem_solving": {"role": "PROBLEM SOLVER",   "content": "DISCUSSION",      "interaction": "PROBLEM-SOLVING SESSION"},
+    "brainstorming":   {"role": "CREATIVE DIRECTOR","content": "BRAINSTORM",      "interaction": "BRAINSTORM — RAPID-FIRE IDEAS"},
+    "teach_me":        {"role": "TEACHER",          "content": "LESSON",          "interaction": "LESSON — TEACH, EXPLAIN, QUIZ"},
+    "advice":          {"role": "ADVISOR",           "content": "ADVICE SESSION", "interaction": "ADVICE SESSION — LISTEN, GUIDE, SUGGEST"},
+    "decision_help":   {"role": "ADVISOR",           "content": "DECISION SESSION","interaction": "DECISION HELP — WEIGH OPTIONS, COMPARE"},
+    "designing":       {"role": "DESIGNER",          "content": "DESIGN SESSION", "interaction": "DESIGN SESSION — SKETCH IDEAS, ITERATE"},
+    "weird":           {"role": "ABSURDIST WRITER", "content": "WHATEVER THIS IS","interaction": "WHATEVER THIS IS — BE WEIRD"},
 }
 
 # ---- Personalities ----
@@ -1063,7 +1063,7 @@ CONVERSATION HISTORY:
 
 {creative_direction}
 
-WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS INTERACTION.
+WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS {format_role_data.get("interaction", "INTERACTION")}.
 THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
 Some lines should be 2 words. Some 20. Very rarely 50.
 
@@ -1293,10 +1293,9 @@ CONVERSATION HISTORY:
 
 THE USER JUST SAID: "{user_text}"
 
-WRITE 1 TO 5 LINES REACTING TO WHAT THE USER SAID.
-Be unpredictable. Vary length and tone.
+WRITE 1 TO 5 LINES OF SPONTANEOUS {format_role_data.get("interaction", "INTERACTION")} REACTING TO WHAT THE USER SAID.
+THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
 Some lines should be 2 words. Some 20. Very rarely 50.
-Let them interrupt, repeat, trail off, go on tangents.
 
 Use "gpt" and "claude" as speaker labels.
 
