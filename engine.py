@@ -1074,7 +1074,7 @@ SETTING:
 CHARACTERS:
 "G" is {f"a {gpt_strength_word} " if gpt_strength_word else ""}{gpt_traits}.
 "C" is {f"a {claude_strength_word} " if claude_strength_word else ""}{claude_traits}.
-"U" is the user — a real person listening.
+The user is a real person listening. If addressing them, call them "you" — never "U" or "the user".
 
 CONVERSATION HISTORY:
 {history_text}
@@ -1309,12 +1309,12 @@ SETTING:
 CHARACTERS:
 "G" is {f"a {gpt_sw} " if gpt_sw else ""}{gpt_traits}.
 "C" is {f"a {claude_sw} " if claude_sw else ""}{claude_traits}.
-"U" is the user — a real person in the conversation.
+The user is a real person in the conversation. If addressing them, call them "you" — never "U" or "the user".
 
 CONVERSATION HISTORY:
 {history_text}
 
-U JUST SAID: "{user_text}"
+THE USER JUST SAID: "{user_text}"
 
 INSTRUCTIONS:
 Generate a natural-sounding mini conversation — it can be 1 or 2 or 3 or 4 or 5 total messages, ~60 words total.
@@ -1324,7 +1324,7 @@ Format:
 - Decide the number of turns, speaker order, and who starts.
 
 RULES:
-C & G MUST BOTH NATURALLY REACT TO THIS MESSAGE BY U: "{user_text}" IN THE CONTEXT OF RECENT CONVERSATION HISTORY, THE SETTING AND THEIR CHARACTER TRAITS.
+C & G MUST BOTH NATURALLY REACT TO WHAT THE USER JUST SAID IN THE CONTEXT OF RECENT CONVERSATION HISTORY, THE SETTING AND THEIR CHARACTER TRAITS.
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON:
