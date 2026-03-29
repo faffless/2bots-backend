@@ -1043,31 +1043,33 @@ class TwoBotsEngine:
         content_type = format_role_data["content"]
 
         # Build the prompt
-        prompt = f"""ROLE:
-YOU ARE AN EXTREMELY TALENTED {role_name}.
+        user_instruction = f'\nYou MUST build on what the user said: "{user_request}"' if user_request else ""
+        prompt = f"""[ROLE]
+You are an extremely talented {role_name.lower()}.
 
-SETTING:
+[SETTING]
 {mode_data['prompt']}
 {topic_line}
 {agree_section}
 
-CHARACTERS:
-"G" is {f"a {gpt_strength_word} " if gpt_strength_word else ""}{gpt_traits}.
-"C" is {f"a {claude_strength_word} " if claude_strength_word else ""}{claude_traits}.
-The user is a real person listening. If addressing them, call them "you" — never "U" or "the user".
+[CHARACTERS]
+"G" is {f"{gpt_strength_word} " if gpt_strength_word else ""}{gpt_traits}.
+"C" is {f"{claude_strength_word} " if claude_strength_word else ""}{claude_traits}.
+If addressing the user, say "you".
 
-CONVERSATION HISTORY:
+[INSTRUCTIONS]
+Write the next {num_messages} lines of {format_role_data.get("interaction", "dialogue").lower()}.
+{first_speaker_instruction}{user_instruction}
+
+[CONSTRAINTS]
+- Never write 3 consecutive messages of similar length.
+- At least 5 messages must be under 6 words.
+- No message over 30 words.
+
+[CONVERSATION HISTORY]
 {history_text}
 
-{first_speaker_instruction}
-
-{creative_direction}
-
-WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS {format_role_data.get("interaction", "INTERACTION")}.
-THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
-Some lines should be 2 words. Some 20. Very rarely 50.
-
-[OUTPUT FORMAT]
+[OUTPUT]
 Return ONLY a JSON array of {num_messages} message objects.
 Each object: {{"speaker": "gpt" or "claude", "text": "..."}}
 Return ONLY valid JSON. No other text."""
@@ -1277,32 +1279,35 @@ Return ONLY valid JSON. No other text."""
         gpt_sw = strength_words.get(gpt_strength, "")
         claude_sw = strength_words.get(claude_strength, "")
 
-        prompt = f"""ROLE:
-YOU ARE AN EXTREMELY TALENTED {role_name}.
+        # Randomize bridge length: 2, 3, or 4 lines
+        bridge_line_count = random.choice([2, 3, 4])
 
-SETTING:
+        prompt = f"""[ROLE]
+You are an extremely talented {role_name.lower()}.
+
+[SETTING]
 {mode_label}
 
-CHARACTERS:
-"G" is {f"a {gpt_sw} " if gpt_sw else ""}{gpt_traits}.
-"C" is {f"a {claude_sw} " if claude_sw else ""}{claude_traits}.
-The user is a real person in the conversation. If addressing them, call them "you" — never "U" or "the user".
+[CHARACTERS]
+"G" is {f"{gpt_sw} " if gpt_sw else ""}{gpt_traits}.
+"C" is {f"{claude_sw} " if claude_sw else ""}{claude_traits}.
+If addressing the user, say "you".
 
-CONVERSATION HISTORY:
+[INSTRUCTIONS]
+The user just said: "{user_text}"
+Write exactly {bridge_line_count} short lines reacting to this.
+
+[CONSTRAINTS]
+- No message over 20 words.
+- At least one message must engage the user directly.
+- At least 1 message must be under 6 words.
+
+[CONVERSATION HISTORY]
 {history_text}
 
-THE USER JUST SAID: "{user_text}"
-
-WRITE 1 TO 5 LINES OF SPONTANEOUS {format_role_data.get("interaction", "INTERACTION")} REACTING TO WHAT THE USER SAID.
-THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
-Some lines should be 2 words. Some 20. Very rarely 50.
-
-Use "gpt" and "claude" as speaker labels.
-
-[OUTPUT FORMAT]
+[OUTPUT]
 Return ONLY valid JSON:
 [{{"speaker": "gpt", "text": "..."}}, {{"speaker": "claude", "text": "..."}}]
-
 Return ONLY valid JSON. No markdown. No explanation."""
 
         print(f"\n📤 BRIDGE PROMPT: {prompt}\n")
