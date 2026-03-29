@@ -1587,7 +1587,7 @@ Add only one new, relevant contribution that directly engages the latest message
 {recent_text}
 
 [INSTRUCTIONS]
-Keep your response under 30 words. Do not prefix your response with your name or any label."""
+Do not prefix your response with your name or any label."""
 
         print(f"\n{'='*60}")
         print(f"RESEARCH PING-PONG: {bot_name}'s turn")
@@ -1641,7 +1641,7 @@ Keep your response under 30 words. Do not prefix your response with your name or
             conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
             conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
 
-        recent_msgs = self.state.gpt_msgs[-9:] if self.state.gpt_msgs else []
+        recent_msgs = self.state.gpt_msgs[-7:] if self.state.gpt_msgs else []
         recent_lines = []
         for m in recent_msgs:
             content = m["content"]
@@ -1657,10 +1657,10 @@ Keep your response under 30 words. Do not prefix your response with your name or
 
         prompt = f"""You are {bot_name}. You and the other AI have been researching "{topic}".
 {conclusions_section}
-[LAST 9 MESSAGES]
+[LAST 7 MESSAGES]
 {recent_text}
 
-In under 30 words: summarise what has been discussed and state what, if anything, you both agree on as a concrete finding.
+In under 30 words: summarise only the last 7 messages and propose a concrete finding you both agree on.
 Do not prefix with your name. No markdown, no lists."""
 
         print(f"\n{'='*60}")
