@@ -565,10 +565,11 @@ async def research_stream(request: Request, req: ResearchRequest):
     other = "claude" if who == "gpt" else "gpt"
 
     # ---- RESEARCH PING-PONG MODE ---- Check if forced review is due
-    # Every 9th message triggers a review cycle (messages 9, 19, 29...)
-    # Review cycle = 2 forced messages: review (msg 9) + respond (msg 10)
+    # Every 9th message triggers a review cycle (messages 9, 18, 27...)
+    # Review cycle = 2 forced messages: review + respond
     cycle_position = msg_count % 9  # 0 means it's a 9th message
     needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.research_complete)
+    log("research", f"MSG COUNT: {msg_count}, cycle_position: {cycle_position}, needs_review: {needs_review}")
 
     # Determine who reviews: alternates each cycle
     # Cycle 1 (msg 9): GPT reviews, Claude responds
