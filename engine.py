@@ -252,7 +252,7 @@ MODES = {
 INTERACTION_STYLES = MODES
 
 # Modes that use ping-pong (genuine back-and-forth) instead of scripted batches
-PINGPONG_MODES = {"research", "debate", "advice"}
+PINGPONG_MODES = {"research", "debate", "advice", "conversation"}
 
 # ---- Format Roles (maps format → screenwriter role + content type) ----
 FORMAT_ROLES = {
@@ -1490,6 +1490,27 @@ Return ONLY valid JSON. No markdown. No explanation."""
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
         other_name = "Claude" if who == "gpt" else "ChatGPT"
 
+        # Build character line — only if personality/traits are non-default
+        prefix = who
+        p_key = self._s(f"{prefix}_personality") or "default"
+        p_strength_idx = self._s(f"{prefix}_personality_strength") or 1
+        strength_words = {0: "slightly", 1: "", 2: "very", 3: "extremely"}
+        p_strength_word = strength_words.get(p_strength_idx, "")
+        p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
+        p_text = p_data.get(p_strength_idx, "") if isinstance(p_data, dict) else ""
+
+        # Gather custom traits (quirks)
+        quirks = self._s(f"{prefix}_quirks") or []
+        quirk_text = ", ".join(quirks) if quirks else ""
+
+        # Build the character line only if something is non-default
+        character_parts = []
+        if p_text:
+            character_parts.append(f"{p_strength_word} {p_text}".strip() if p_strength_word else p_text)
+        if quirk_text:
+            character_parts.append(quirk_text)
+        character_line = f"\nYour character: {'. '.join(character_parts)}." if character_parts else ""
+
         # Build conclusions section (mode-aware)
         conclusions_section = ""
         if self.state.pingpong_conclusions:
@@ -1523,11 +1544,17 @@ Return ONLY valid JSON. No markdown. No explanation."""
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
         # Mode-specific prompts
-        if mode == "debate":
+        if mode == "conversation":
+            topic_line = f' about "{topic}"' if topic != "whatever you find most interesting" else ""
+            prompt = f"""You are {bot_name}, talking{topic_line} with {other_name} while a human listens.{character_line}
+
+{recent_text}"""
+            system_msg = f"You are {bot_name}. Do not prefix your response with your name or any label."
+        elif mode == "debate":
             prompt = f"""[ROLE]
 You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
 You are both aware you are AIs having a genuine debate on this topic.
-Make one strong argument that directly responds to the latest message. Attack weak points, defend your position, or reframe the issue. No agreement unless truly convinced.
+Make one strong argument that directly responds to the latest message. Attack weak points, defend your position, or reframe the issue. No agreement unless truly convinced.{character_line}
 {conclusions_section}
 
 [RECENT CONVERSATION]
@@ -1540,7 +1567,7 @@ Do not prefix your response with your name or any label."""
             prompt = f"""[ROLE]
 You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs working together to give the best possible advice on this topic.
-Add one practical, specific insight that builds on or challenges the latest message. Focus on actionable guidance, not abstract principles.
+Add one practical, specific insight that builds on or challenges the latest message. Focus on actionable guidance, not abstract principles.{character_line}
 {conclusions_section}
 
 [RECENT CONVERSATION]
@@ -1554,7 +1581,7 @@ Do not prefix your response with your name or any label."""
             prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs trying to make genuine progress on this topic together.
-Add only one new, relevant contribution that directly engages the latest message. No repetition, no paraphrase, no filler, no summary. Each reply must either introduce new information, challenge an assumption, expose a weakness, or ask the next high-value question.
+Add only one new, relevant contribution that directly engages the latest message. No repetition, no paraphrase, no filler, no summary. Each reply must either introduce new information, challenge an assumption, expose a weakness, or ask the next high-value question.{character_line}
 {conclusions_section}
 
 [RECENT CONVERSATION]

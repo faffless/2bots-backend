@@ -577,7 +577,8 @@ async def research_stream(request: Request, req: ResearchRequest):
     # Check if forced review is due
     # Every 9th message triggers a review cycle (messages 9, 18, 27...)
     cycle_position = msg_count % 9  # 0 means it's a 9th message
-    needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.pingpong_complete)
+    current_mode = engine._s("mode") or "conversation"
+    needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.pingpong_complete and current_mode != "conversation")
     log("research", f"MSG COUNT: {msg_count}, cycle_position: {cycle_position}, needs_review: {needs_review}")
 
     # Determine who reviews: alternates each cycle
@@ -602,10 +603,11 @@ async def research_stream(request: Request, req: ResearchRequest):
         if initial_complete:
             text_event["pingpong_complete"] = True
 
-        # Send countdown: messages until next review opportunity
-        msgs_until_review = 9 - (msg_count % 9) if (msg_count % 9) != 0 else 0
-        if msgs_until_review > 0 and not initial_complete:
-            text_event["msgs_until_review"] = msgs_until_review
+        # Send countdown: messages until next review opportunity (not for conversation mode)
+        if current_mode != "conversation":
+            msgs_until_review = 9 - (msg_count % 9) if (msg_count % 9) != 0 else 0
+            if msgs_until_review > 0 and not initial_complete:
+                text_event["msgs_until_review"] = msgs_until_review
 
         yield sse(text_event)
 
