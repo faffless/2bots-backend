@@ -1032,8 +1032,8 @@ class TwoBotsEngine:
         gpt_strength_word = strength_words.get(strength_idx_gpt, "")
         claude_strength_word = strength_words.get(strength_idx_claude, "")
 
-        gpt_default_style = "keeps things moving, asks questions, pivots energy"
-        claude_default_style = "goes deeper, challenges assumptions, adds substance"
+        gpt_default_style = "energetic, curious, enthusiastic"
+        claude_default_style = "thoughtful, witty, grounded"
         gpt_traits = gpt_character if gpt_character else gpt_default_style
         claude_traits = claude_character if claude_character else claude_default_style
 
@@ -1238,8 +1238,8 @@ Return ONLY valid JSON. No other text."""
 
         gpt_character = build_character("gpt")
         claude_character = build_character("claude")
-        gpt_default = "Discussion momentum — keeps things moving, asks questions, pivots energy"
-        claude_default = "Discussion depth — goes deeper, challenges assumptions, adds substance"
+        gpt_default = "energetic, curious, enthusiastic"
+        claude_default = "thoughtful, witty, grounded"
         gpt_traits = gpt_character if gpt_character else gpt_default
         claude_traits = claude_character if claude_character else claude_default
 
