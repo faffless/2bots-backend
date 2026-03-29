@@ -1562,14 +1562,8 @@ Return ONLY valid JSON. No markdown. No explanation."""
             conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
             conclusions_section = f"\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
 
-        remaining = 5 - num_conclusions
-        if remaining > 0:
-            goal_line = f"\n[GOAL] You have reached {num_conclusions} of 5 conclusions. Keep researching until you reach 5."
-        else:
-            goal_line = "\n[GOAL] You have reached 5 conclusions. Summarise your final findings."
-
-        # Only use last 10 messages for context (conclusions carry the full journey)
-        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        # Only use last 9 messages for context (conclusions carry the full journey)
+        recent_msgs = self.state.gpt_msgs[-9:] if self.state.gpt_msgs else []
         recent_lines = []
         for m in recent_msgs:
             content = m["content"]
@@ -1583,27 +1577,18 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
-        # Agreeableness for research mode
-        agreeableness = self.state.personality
-        agree_line = ""
-        if agreeableness < 0.3:
-            agree_line = "\nYou tend to agree and build on what the other researcher says."
-        elif agreeableness > 0.7:
-            agree_line = "\nYou tend to challenge and push back on the other researcher's claims."
-
         prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs trying to make genuine progress on this topic together.
-Do not repeat what has already been said. Every response must add something new — a new angle, a challenge, a question, or new information.{personality_line}{agree_line}
-{conclusions_section}{goal_line}
+Do not repeat what has already been said. Every response must add something new — a new angle, a challenge, a question, or new information.{personality_line}
+{conclusions_section}
 
 [RECENT CONVERSATION]
 {recent_text}
 
 [INSTRUCTIONS]
 Keep your response under 30 words. Do not prefix your response with your name or any label.
-No markdown, no lists.
-If you believe you and the other researcher have genuinely agreed on a concrete conclusion, end your response with [CONCLUSION: your conclusion here]. Only do this when there is real agreement, not just restating the same point."""
+No markdown, no lists."""
 
         print(f"\n{'='*60}")
         print(f"RESEARCH PING-PONG: {bot_name}'s turn")
@@ -1633,20 +1618,6 @@ If you believe you and the other researcher have genuinely agreed on a concrete 
                 )
                 text = resp.choices[0].message.content or "Hmm, go on."
 
-            # ---- RESEARCH PING-PONG MODE ---- Parse and extract conclusions
-            import re
-            conclusion_match = re.search(r'\[CONCLUSION:\s*(.+?)\]', text)
-            if conclusion_match:
-                conclusion = conclusion_match.group(1).strip()
-                self.state.research_conclusions.append(conclusion)
-                num = len(self.state.research_conclusions)
-                print(f"📋 Research conclusion #{num}: {conclusion}")
-                # Strip the tag from displayed text
-                text = re.sub(r'\s*\[CONCLUSION:\s*.+?\]', '', text).strip()
-                if num >= 5:
-                    self.state.research_complete = True
-                    print("🏁 Research complete — 5 conclusions reached!")
-
             return inject_hesitation(text)
 
         except Exception as e:
@@ -1656,24 +1627,22 @@ If you believe you and the other researcher have genuinely agreed on a concrete 
             else:
                 return "You know, that raises some fascinating questions."
 
-    def generate_research_synthesis(self, who: str) -> str:
+    def generate_research_review(self, who: str) -> str:
         """---- RESEARCH PING-PONG MODE ----
-        Generate a synthesis/review of research progress every 10 messages.
-        Returns plain text summary that gets stored as a progress note."""
+        Forced review: one bot summarises what's been discussed and proposes a finding.
+        Called at message 9, 19, 29, etc. Alternates between GPT and Claude."""
         topic = self._s("topic") or "random"
         if topic.lower() == "random":
             topic = "whatever you find most interesting"
 
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
 
-        # Build previous reviews section
-        prev_reviews = ""
-        if self.state.research_reviews:
-            review_lines = [f"Review {i+1}: {r}" for i, r in enumerate(self.state.research_reviews)]
-            prev_reviews = "\n[PREVIOUS REVIEWS]\n" + "\n".join(review_lines) + "\n"
+        conclusions_section = ""
+        if self.state.research_conclusions:
+            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
+            conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
 
-        # Last 10 messages for context
-        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        recent_msgs = self.state.gpt_msgs[-9:] if self.state.gpt_msgs else []
         recent_lines = []
         for m in recent_msgs:
             content = m["content"]
@@ -1687,54 +1656,98 @@ If you believe you and the other researcher have genuinely agreed on a concrete 
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
-        prompt = f"""[ROLE]
-You are {bot_name}, reviewing the research so far on "{topic}".
-{prev_reviews}
-[RECENT CONVERSATION]
+        prompt = f"""You are {bot_name}. You and the other AI have been researching "{topic}".
+{conclusions_section}
+[LAST 9 MESSAGES]
 {recent_text}
 
-[INSTRUCTIONS]
-In under 40 words, state:
-1. What you both agree on so far
-2. What the next research step should be
-3. If you had autonomy and infinite money, what would you do next
-
-Do not prefix your response with your name or any label. No markdown, no lists."""
+In under 30 words: summarise what has been discussed and state what, if anything, you both agree on as a concrete finding.
+Do not prefix with your name. No markdown, no lists."""
 
         print(f"\n{'='*60}")
-        print(f"RESEARCH SYNTHESIS: {bot_name} reviewing progress")
-        print(f"{'='*60}")
-        print(prompt)
+        print(f"RESEARCH REVIEW: {bot_name} proposing a finding")
         print(f"{'='*60}\n")
 
         try:
             if who == "claude":
                 resp = self.claude_client.messages.create(
-                    model=CLAUDE_MODEL,
-                    max_tokens=200,
-                    system=f"You are {bot_name} summarising research progress. Be concise.",
+                    model=CLAUDE_MODEL, max_tokens=200,
+                    system=f"You are {bot_name} reviewing research progress. Be concise and direct.",
                     messages=[{"role": "user", "content": prompt}],
                 )
                 text = resp.content[0].text if resp.content else "Let me summarise where we are."
             else:
                 resp = self.openai_client.chat.completions.create(
-                    model=GPT_MODEL,
-                    max_tokens=200,
+                    model=GPT_MODEL, max_tokens=200,
                     messages=[
-                        {"role": "system", "content": f"You are {bot_name} summarising research progress. Be concise."},
+                        {"role": "system", "content": f"You are {bot_name} reviewing research progress. Be concise and direct."},
                         {"role": "user", "content": prompt},
                     ],
                 )
-                text = resp.choices[0].message.content or "Let me think about where we've gotten to."
-
-            # Store the review
-            self.state.research_reviews.append(text)
-            print(f"📋 Research review #{len(self.state.research_reviews)}: {text}")
+                text = resp.choices[0].message.content or "Let me think about where we are."
             return text
-
         except Exception as e:
-            print(f"Research synthesis error ({who}): {e}")
-            return "Let me summarise what we've covered so far."
+            print(f"Research review error ({who}): {e}")
+            return "Here's what I think we've established so far."
+
+    def generate_research_respond(self, who: str, review_text: str) -> str:
+        """---- RESEARCH PING-PONG MODE ----
+        Forced response: the other bot agrees/disagrees with the proposed finding
+        and suggests the next step. Called at message 10, 20, 30, etc."""
+        topic = self._s("topic") or "random"
+        if topic.lower() == "random":
+            topic = "whatever you find most interesting"
+
+        bot_name = "ChatGPT" if who == "gpt" else "Claude"
+        other_name = "Claude" if who == "gpt" else "ChatGPT"
+
+        conclusions_section = ""
+        if self.state.research_conclusions:
+            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
+            conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+
+        num_conclusions = len(self.state.research_conclusions)
+
+        prompt = f"""You are {bot_name}. {other_name} just proposed this finding about "{topic}":
+"{review_text}"
+{conclusions_section}
+In under 30 words: agree or disagree with this finding, then state what the next research step should be. If you had autonomy and infinite resources, what would you do next?
+Do not prefix with your name. No markdown, no lists."""
+
+        print(f"\n{'='*60}")
+        print(f"RESEARCH RESPOND: {bot_name} responding to finding")
+        print(f"{'='*60}\n")
+
+        try:
+            if who == "claude":
+                resp = self.claude_client.messages.create(
+                    model=CLAUDE_MODEL, max_tokens=200,
+                    system=f"You are {bot_name} evaluating a research finding. Be direct.",
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = resp.content[0].text if resp.content else "I think that's a fair assessment."
+            else:
+                resp = self.openai_client.chat.completions.create(
+                    model=GPT_MODEL, max_tokens=200,
+                    messages=[
+                        {"role": "system", "content": f"You are {bot_name} evaluating a research finding. Be direct."},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                text = resp.choices[0].message.content or "That's a reasonable conclusion."
+
+            # Store the finding as a conclusion
+            self.state.research_conclusions.append(review_text.strip())
+            num = len(self.state.research_conclusions)
+            print(f"📋 Research conclusion #{num}: {review_text.strip()}")
+            if num >= 5:
+                self.state.research_complete = True
+                print("🏁 Research complete — 5 conclusions reached!")
+
+            return text
+        except Exception as e:
+            print(f"Research respond error ({who}): {e}")
+            return "I agree with that assessment. Let's move forward."
 
     # ---- END RESEARCH PING-PONG MODE ----
 

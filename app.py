@@ -559,11 +559,28 @@ async def research_stream(request: Request, req: ResearchRequest):
     # Add the response to conversation history
     engine.add_message(who, text)
     engine.state.research_msg_count += 1
+    msg_count = engine.state.research_msg_count
     save_messages_only(sid, engine)
 
     other = "claude" if who == "gpt" else "gpt"
 
-    # ---- RESEARCH PING-PONG MODE ---- Check conclusion state
+    # ---- RESEARCH PING-PONG MODE ---- Check if forced review is due
+    # Every 9th message triggers a review cycle (messages 9, 19, 29...)
+    # Review cycle = 2 forced messages: review (msg 9) + respond (msg 10)
+    cycle_position = msg_count % 9  # 0 means it's a 9th message
+    needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.research_complete)
+
+    # Determine who reviews: alternates each cycle
+    # Cycle 1 (msg 9): GPT reviews, Claude responds
+    # Cycle 2 (msg 18): Claude reviews, GPT responds
+    cycle_number = msg_count // 9
+    if cycle_number % 2 == 1:
+        reviewer = "gpt"
+        responder = "claude"
+    else:
+        reviewer = "claude"
+        responder = "gpt"
+
     num_conclusions = len(engine.state.research_conclusions)
     research_complete = engine.state.research_complete
 
@@ -590,19 +607,61 @@ async def research_stream(request: Request, req: ResearchRequest):
             "mime_type": "audio/mpeg",
         })
 
-        # Start prefetch for the OTHER bot while TTS streams
-        async def _prefetch_other():
-            try:
-                pf_engine = get_engine(sid)
-                pf_text = await asyncio.to_thread(pf_engine.generate_research_response, other)
-                RESEARCH_PREFETCH[sid] = {"who": other, "text": pf_text}
-                log("research", f"Prefetched {other}'s response for {sid[:8]}...")
-            except Exception as e:
-                log("research", f"Research prefetch failed: {e}")
-        asyncio.create_task(_prefetch_other())
+        # ---- RESEARCH PING-PONG MODE ---- Forced review cycle
+        if needs_review:
+            log("research", f"Forced review at msg #{msg_count} — {reviewer} reviews, {responder} responds")
+
+            # Step 1: Reviewer proposes a finding
+            review_text = await asyncio.to_thread(engine.generate_research_review, reviewer)
+            engine.add_message(reviewer, review_text)
+            engine.state.research_msg_count += 1
+            save_messages_only(sid, engine)
+
+            review_voice = engine.get_gpt_voice() if reviewer == "gpt" else engine.get_claude_voice()
+            yield sse({"type": "text", "speaker": reviewer, "text": review_text})
+            r_audio = await engine.generate_tts_bytes(review_text, review_voice, reviewer)
+            yield sse({
+                "type": "audio", "speaker": reviewer,
+                "audio_base64": base64.b64encode(r_audio).decode(),
+                "mime_type": "audio/mpeg",
+            })
+
+            # Step 2: Responder agrees/disagrees and suggests next step
+            respond_text = await asyncio.to_thread(engine.generate_research_respond, responder, review_text)
+            engine.add_message(responder, respond_text)
+            engine.state.research_msg_count += 1
+            save_messages_only(sid, engine)
+
+            respond_voice = engine.get_gpt_voice() if responder == "gpt" else engine.get_claude_voice()
+            num_conclusions = len(engine.state.research_conclusions)
+            resp_event = {"type": "text", "speaker": responder, "text": respond_text, "conclusions": num_conclusions}
+            if engine.state.research_complete:
+                resp_event["research_complete"] = True
+            yield sse(resp_event)
+            s_audio = await engine.generate_tts_bytes(respond_text, respond_voice, responder)
+            yield sse({
+                "type": "audio", "speaker": responder,
+                "audio_base64": base64.b64encode(s_audio).decode(),
+                "mime_type": "audio/mpeg",
+            })
+
+        # Start prefetch for the OTHER bot (skip if research complete)
+        if not engine.state.research_complete:
+            async def _prefetch_other():
+                try:
+                    pf_engine = get_engine(sid)
+                    pf_text = await asyncio.to_thread(pf_engine.generate_research_response, other)
+                    RESEARCH_PREFETCH[sid] = {"who": other, "text": pf_text}
+                    log("research", f"Prefetched {other}'s response for {sid[:8]}...")
+                except Exception as e:
+                    log("research", f"Research prefetch failed: {e}")
+            asyncio.create_task(_prefetch_other())
 
         # Tell frontend who goes next
-        yield sse({"type": "done", "next_who": other})
+        done_event = {"type": "done", "next_who": other}
+        if engine.state.research_complete:
+            done_event["research_complete"] = True
+        yield sse(done_event)
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
