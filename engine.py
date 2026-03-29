@@ -1058,13 +1058,11 @@ You are an extremely talented {role_name.lower()}.
 If addressing the user, say "you".
 
 [INSTRUCTIONS]
-Write the next {num_messages} lines of {format_role_data.get("interaction", "dialogue").lower()}.
 {first_speaker_instruction}{user_instruction}
 
-[CONSTRAINTS]
-- The entire dialogue MUST AVOID any visible pattern in length.
-- At least 3 messages must be under 6 words.
-- No message over 30 words.
+WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS {format_role_data.get("interaction", "INTERACTION").upper()}.
+THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
+Some lines should be 2 words. Some 20. Very rarely 50.
 
 [CONVERSATION HISTORY]
 {history_text}
