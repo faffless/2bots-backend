@@ -581,17 +581,17 @@ async def research_stream(request: Request, req: ResearchRequest):
         reviewer = "claude"
         responder = "gpt"
 
-    num_conclusions = len(engine.state.research_conclusions)
-    research_complete = engine.state.research_complete
+    initial_conclusions = len(engine.state.research_conclusions)
+    initial_complete = engine.state.research_complete
 
     async def generate():
         voice = engine.get_gpt_voice() if who == "gpt" else engine.get_claude_voice()
 
         # Send text event with conclusion info
         text_event = {"type": "text", "speaker": who, "text": text}
-        if num_conclusions > 0:
-            text_event["conclusions"] = num_conclusions
-        if research_complete:
+        if initial_conclusions > 0:
+            text_event["conclusions"] = initial_conclusions
+        if initial_complete:
             text_event["research_complete"] = True
         yield sse(text_event)
 
@@ -633,8 +633,8 @@ async def research_stream(request: Request, req: ResearchRequest):
             save_messages_only(sid, engine)
 
             respond_voice = engine.get_gpt_voice() if responder == "gpt" else engine.get_claude_voice()
-            num_conclusions = len(engine.state.research_conclusions)
-            resp_event = {"type": "text", "speaker": responder, "text": respond_text, "conclusions": num_conclusions}
+            updated_conclusions = len(engine.state.research_conclusions)
+            resp_event = {"type": "text", "speaker": responder, "text": respond_text, "conclusions": updated_conclusions}
             if engine.state.research_complete:
                 resp_event["research_complete"] = True
             yield sse(resp_event)
