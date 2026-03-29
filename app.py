@@ -125,6 +125,10 @@ def save_messages_only(sid: str, engine: TwoBotsEngine) -> None:
         SESSIONS[sid]["rounds_since_filler"] = engine.state.rounds_since_filler
         SESSIONS[sid]["next_filler_at"] = engine.state.next_filler_at
         SESSIONS[sid]["autopilot_batch_count"] = engine.state.autopilot_batch_count
+        # ---- RESEARCH PING-PONG MODE ----
+        SESSIONS[sid]["research_msg_count"] = engine.state.research_msg_count
+        SESSIONS[sid]["research_conclusions"] = list(engine.state.research_conclusions)
+        SESSIONS[sid]["research_complete"] = engine.state.research_complete
     else:
         SESSIONS[sid] = engine.export_state()
 

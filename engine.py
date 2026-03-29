@@ -672,6 +672,10 @@ class TwoBotsEngine:
         engine.state.autopilot_batch_count = int(data.get("autopilot_batch_count", 0))
         engine.state.prev_format = data.get("prev_format")
         engine.state.prev_topic = data.get("prev_topic")
+        # ---- RESEARCH PING-PONG MODE ----
+        engine.state.research_msg_count = int(data.get("research_msg_count", 0))
+        engine.state.research_conclusions = list(data.get("research_conclusions") or [])
+        engine.state.research_complete = bool(data.get("research_complete", False))
         return engine
 
     def export_state(self) -> Dict[str, Any]:
@@ -685,6 +689,10 @@ class TwoBotsEngine:
             "autopilot_batch_count": self.state.autopilot_batch_count,
             "prev_format": self.state.prev_format,
             "prev_topic": self.state.prev_topic,
+            # ---- RESEARCH PING-PONG MODE ----
+            "research_msg_count": self.state.research_msg_count,
+            "research_conclusions": list(self.state.research_conclusions),
+            "research_complete": self.state.research_complete,
         }
 
     def should_filler(self) -> bool:
