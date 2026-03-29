@@ -631,6 +631,9 @@ class ConversationState:
     autopilot_batch_count: int = 0
     prev_format: Optional[str] = None
     prev_topic: Optional[str] = None
+    # ---- RESEARCH PING-PONG MODE ----
+    research_msg_count: int = 0
+    research_reviews: List[str] = field(default_factory=list)
 
 
 class TwoBotsEngine:
@@ -1550,11 +1553,32 @@ Return ONLY valid JSON. No markdown. No explanation."""
         p_text = p_data.get(p_strength, "") if isinstance(p_data, dict) else ""
         personality_line = f"\n{p_text}" if p_text else ""
 
+        # ---- RESEARCH PING-PONG MODE ---- Build progress notes from previous reviews
+        progress_section = ""
+        if self.state.research_reviews:
+            review_lines = [f"Review {i+1}: {r}" for i, r in enumerate(self.state.research_reviews)]
+            progress_section = f"\n[PROGRESS SO FAR]\n" + "\n".join(review_lines) + "\n"
+
+        # Only use last 10 messages for context (reviews carry the full journey)
+        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        recent_lines = []
+        for m in recent_msgs:
+            content = m["content"]
+            if m["role"] == "assistant":
+                recent_lines.append(f"ChatGPT: {content}")
+            elif "[Claude]" in content:
+                recent_lines.append(f"Claude: {content.replace('[Claude]: ', '')}")
+            elif "[User]" in content:
+                recent_lines.append(f"User: {content.replace('[User]: ', '')}")
+            else:
+                recent_lines.append(f"ChatGPT: {content}")
+        recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
+
         prompt = f"""[ROLE]
 You are {bot_name}, researching "{topic}" with {other_name} and a human listener.{personality_line}
-
-[CONVERSATION SO FAR]
-{history_text}
+{progress_section}
+[RECENT CONVERSATION]
+{recent_text}
 
 [INSTRUCTIONS]
 Keep your response under 30 words. Do not prefix your response with your name or any label.
@@ -1596,6 +1620,86 @@ No markdown, no lists."""
                 return "That's a really interesting angle, let me think about that."
             else:
                 return "You know, that raises some fascinating questions."
+
+    def generate_research_synthesis(self, who: str) -> str:
+        """---- RESEARCH PING-PONG MODE ----
+        Generate a synthesis/review of research progress every 10 messages.
+        Returns plain text summary that gets stored as a progress note."""
+        topic = self._s("topic") or "random"
+        if topic.lower() == "random":
+            topic = "whatever you find most interesting"
+
+        bot_name = "ChatGPT" if who == "gpt" else "Claude"
+
+        # Build previous reviews section
+        prev_reviews = ""
+        if self.state.research_reviews:
+            review_lines = [f"Review {i+1}: {r}" for i, r in enumerate(self.state.research_reviews)]
+            prev_reviews = "\n[PREVIOUS REVIEWS]\n" + "\n".join(review_lines) + "\n"
+
+        # Last 10 messages for context
+        recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
+        recent_lines = []
+        for m in recent_msgs:
+            content = m["content"]
+            if m["role"] == "assistant":
+                recent_lines.append(f"ChatGPT: {content}")
+            elif "[Claude]" in content:
+                recent_lines.append(f"Claude: {content.replace('[Claude]: ', '')}")
+            elif "[User]" in content:
+                recent_lines.append(f"User: {content.replace('[User]: ', '')}")
+            else:
+                recent_lines.append(f"ChatGPT: {content}")
+        recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
+
+        prompt = f"""[ROLE]
+You are {bot_name}, reviewing the research so far on "{topic}".
+{prev_reviews}
+[RECENT CONVERSATION]
+{recent_text}
+
+[INSTRUCTIONS]
+In under 40 words, state:
+1. What you both agree on so far
+2. What the next research step should be
+3. If you had autonomy and infinite money, what would you do next
+
+Do not prefix your response with your name or any label. No markdown, no lists."""
+
+        print(f"\n{'='*60}")
+        print(f"RESEARCH SYNTHESIS: {bot_name} reviewing progress")
+        print(f"{'='*60}")
+        print(prompt)
+        print(f"{'='*60}\n")
+
+        try:
+            if who == "claude":
+                resp = self.claude_client.messages.create(
+                    model=CLAUDE_MODEL,
+                    max_tokens=200,
+                    system=f"You are {bot_name} summarising research progress. Be concise.",
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = resp.content[0].text if resp.content else "Let me summarise where we are."
+            else:
+                resp = self.openai_client.chat.completions.create(
+                    model=GPT_MODEL,
+                    max_tokens=200,
+                    messages=[
+                        {"role": "system", "content": f"You are {bot_name} summarising research progress. Be concise."},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                text = resp.choices[0].message.content or "Let me think about where we've gotten to."
+
+            # Store the review
+            self.state.research_reviews.append(text)
+            print(f"📋 Research review #{len(self.state.research_reviews)}: {text}")
+            return text
+
+        except Exception as e:
+            print(f"Research synthesis error ({who}): {e}")
+            return "Let me summarise what we've covered so far."
 
     # ---- END RESEARCH PING-PONG MODE ----
 

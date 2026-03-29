@@ -9,6 +9,7 @@ import asyncio
 import base64
 import json
 import os
+import random
 import time
 import uuid
 from collections import deque
@@ -557,9 +558,13 @@ async def research_stream(request: Request, req: ResearchRequest):
 
     # Add the response to conversation history
     engine.add_message(who, text)
+    engine.state.research_msg_count += 1
     save_messages_only(sid, engine)
 
     other = "claude" if who == "gpt" else "gpt"
+
+    # ---- RESEARCH PING-PONG MODE ---- Check if synthesis is due (every 10 messages)
+    needs_synthesis = engine.state.research_msg_count > 0 and engine.state.research_msg_count % 10 == 0
 
     async def generate():
         voice = engine.get_gpt_voice() if who == "gpt" else engine.get_claude_voice()
@@ -573,6 +578,30 @@ async def research_stream(request: Request, req: ResearchRequest):
         t1 = time.time()
         log(who, f"Research TTS in {t1-t0:.1f}s")
 
+        yield sse({
+            "type": "audio", "speaker": who,
+            "audio_base64": base64.b64encode(audio).decode(),
+            "mime_type": "audio/mpeg",
+        })
+
+        # ---- RESEARCH PING-PONG MODE ---- Synthesis review every 10 messages
+        if needs_synthesis:
+            log("research", f"Synthesis triggered at message #{engine.state.research_msg_count}")
+            synthesis_who = random.choice(["gpt", "claude"])
+            synthesis_text = await asyncio.to_thread(engine.generate_research_synthesis, synthesis_who)
+            engine.add_message(synthesis_who, f"[Review] {synthesis_text}")
+            save_messages_only(sid, engine)
+
+            synthesis_voice = engine.get_gpt_voice() if synthesis_who == "gpt" else engine.get_claude_voice()
+            yield sse({"type": "text", "speaker": synthesis_who, "text": f"[Review] {synthesis_text}"})
+
+            s_audio = await engine.generate_tts_bytes(synthesis_text, synthesis_voice, synthesis_who)
+            yield sse({
+                "type": "audio", "speaker": synthesis_who,
+                "audio_base64": base64.b64encode(s_audio).decode(),
+                "mime_type": "audio/mpeg",
+            })
+
         # Start prefetch for the OTHER bot while TTS streams
         async def _prefetch_other():
             try:
@@ -583,12 +612,6 @@ async def research_stream(request: Request, req: ResearchRequest):
             except Exception as e:
                 log("research", f"Research prefetch failed: {e}")
         asyncio.create_task(_prefetch_other())
-
-        yield sse({
-            "type": "audio", "speaker": who,
-            "audio_base64": base64.b64encode(audio).decode(),
-            "mime_type": "audio/mpeg",
-        })
 
         # Tell frontend who goes next
         yield sse({"type": "done", "next_who": other})
