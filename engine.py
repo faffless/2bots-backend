@@ -1557,9 +1557,8 @@ You are {bot_name}, researching "{topic}" with {other_name} and a human listener
 {history_text}
 
 [INSTRUCTIONS]
-Continue the research discussion naturally. Build on what was just said — agree, disagree, add new angles, ask questions, share insights.
-Talk like a real person, not an assistant. No markdown, no lists.
-Keep your response under 60 words."""
+Keep your response under 30 words. Do not prefix your response with your name or any label.
+No markdown, no lists."""
 
         print(f"\n{'='*60}")
         print(f"RESEARCH PING-PONG: {bot_name}'s turn")
