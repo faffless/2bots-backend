@@ -634,6 +634,8 @@ class ConversationState:
     # ---- RESEARCH PING-PONG MODE ----
     research_msg_count: int = 0
     research_reviews: List[str] = field(default_factory=list)
+    research_conclusions: List[str] = field(default_factory=list)
+    research_complete: bool = False
 
 
 class TwoBotsEngine:
@@ -1553,13 +1555,20 @@ Return ONLY valid JSON. No markdown. No explanation."""
         p_text = p_data.get(p_strength, "") if isinstance(p_data, dict) else ""
         personality_line = f"\n{p_text}" if p_text else ""
 
-        # ---- RESEARCH PING-PONG MODE ---- Build progress notes from previous reviews
-        progress_section = ""
-        if self.state.research_reviews:
-            review_lines = [f"Review {i+1}: {r}" for i, r in enumerate(self.state.research_reviews)]
-            progress_section = f"\n[PROGRESS SO FAR]\n" + "\n".join(review_lines) + "\n"
+        # ---- RESEARCH PING-PONG MODE ---- Build conclusions section
+        conclusions_section = ""
+        num_conclusions = len(self.state.research_conclusions)
+        if self.state.research_conclusions:
+            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
+            conclusions_section = f"\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
 
-        # Only use last 10 messages for context (reviews carry the full journey)
+        remaining = 5 - num_conclusions
+        if remaining > 0:
+            goal_line = f"\n[GOAL] You have reached {num_conclusions} of 5 conclusions. Keep researching until you reach 5."
+        else:
+            goal_line = "\n[GOAL] You have reached 5 conclusions. Summarise your final findings."
+
+        # Only use last 10 messages for context (conclusions carry the full journey)
         recent_msgs = self.state.gpt_msgs[-10:] if self.state.gpt_msgs else []
         recent_lines = []
         for m in recent_msgs:
@@ -1574,17 +1583,27 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
+        # Agreeableness for research mode
+        agreeableness = self.state.personality
+        agree_line = ""
+        if agreeableness < 0.3:
+            agree_line = "\nYou tend to agree and build on what the other researcher says."
+        elif agreeableness > 0.7:
+            agree_line = "\nYou tend to challenge and push back on the other researcher's claims."
+
         prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs trying to make genuine progress on this topic together.
-Do not repeat what has already been said. Every response must add something new — a new angle, a challenge, a question, or new information.{personality_line}
-{progress_section}
+Do not repeat what has already been said. Every response must add something new — a new angle, a challenge, a question, or new information.{personality_line}{agree_line}
+{conclusions_section}{goal_line}
+
 [RECENT CONVERSATION]
 {recent_text}
 
 [INSTRUCTIONS]
 Keep your response under 30 words. Do not prefix your response with your name or any label.
-No markdown, no lists."""
+No markdown, no lists.
+If you believe you and the other researcher have genuinely agreed on a concrete conclusion, end your response with [CONCLUSION: your conclusion here]. Only do this when there is real agreement, not just restating the same point."""
 
         print(f"\n{'='*60}")
         print(f"RESEARCH PING-PONG: {bot_name}'s turn")
@@ -1613,6 +1632,20 @@ No markdown, no lists."""
                     ],
                 )
                 text = resp.choices[0].message.content or "Hmm, go on."
+
+            # ---- RESEARCH PING-PONG MODE ---- Parse and extract conclusions
+            import re
+            conclusion_match = re.search(r'\[CONCLUSION:\s*(.+?)\]', text)
+            if conclusion_match:
+                conclusion = conclusion_match.group(1).strip()
+                self.state.research_conclusions.append(conclusion)
+                num = len(self.state.research_conclusions)
+                print(f"📋 Research conclusion #{num}: {conclusion}")
+                # Strip the tag from displayed text
+                text = re.sub(r'\s*\[CONCLUSION:\s*.+?\]', '', text).strip()
+                if num >= 5:
+                    self.state.research_complete = True
+                    print("🏁 Research complete — 5 conclusions reached!")
 
             return inject_hesitation(text)
 

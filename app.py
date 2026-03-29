@@ -563,14 +563,20 @@ async def research_stream(request: Request, req: ResearchRequest):
 
     other = "claude" if who == "gpt" else "gpt"
 
-    # ---- RESEARCH PING-PONG MODE ---- Check if synthesis is due (every 10 messages)
-    needs_synthesis = engine.state.research_msg_count > 0 and engine.state.research_msg_count % 10 == 0
+    # ---- RESEARCH PING-PONG MODE ---- Check conclusion state
+    num_conclusions = len(engine.state.research_conclusions)
+    research_complete = engine.state.research_complete
 
     async def generate():
         voice = engine.get_gpt_voice() if who == "gpt" else engine.get_claude_voice()
 
-        # Send text event
-        yield sse({"type": "text", "speaker": who, "text": text})
+        # Send text event with conclusion info
+        text_event = {"type": "text", "speaker": who, "text": text}
+        if num_conclusions > 0:
+            text_event["conclusions"] = num_conclusions
+        if research_complete:
+            text_event["research_complete"] = True
+        yield sse(text_event)
 
         # Generate TTS
         t0 = time.time()
@@ -583,24 +589,6 @@ async def research_stream(request: Request, req: ResearchRequest):
             "audio_base64": base64.b64encode(audio).decode(),
             "mime_type": "audio/mpeg",
         })
-
-        # ---- RESEARCH PING-PONG MODE ---- Synthesis review every 10 messages
-        if needs_synthesis:
-            log("research", f"Synthesis triggered at message #{engine.state.research_msg_count}")
-            synthesis_who = random.choice(["gpt", "claude"])
-            synthesis_text = await asyncio.to_thread(engine.generate_research_synthesis, synthesis_who)
-            engine.add_message(synthesis_who, f"[Review] {synthesis_text}")
-            save_messages_only(sid, engine)
-
-            synthesis_voice = engine.get_gpt_voice() if synthesis_who == "gpt" else engine.get_claude_voice()
-            yield sse({"type": "text", "speaker": synthesis_who, "text": f"[Review] {synthesis_text}"})
-
-            s_audio = await engine.generate_tts_bytes(synthesis_text, synthesis_voice, synthesis_who)
-            yield sse({
-                "type": "audio", "speaker": synthesis_who,
-                "audio_base64": base64.b64encode(s_audio).decode(),
-                "mime_type": "audio/mpeg",
-            })
 
         # Start prefetch for the OTHER bot while TTS streams
         async def _prefetch_other():
