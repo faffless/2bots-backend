@@ -629,6 +629,8 @@ class ConversationState:
     rounds_since_filler: int = 0
     next_filler_at: int = 0
     autopilot_batch_count: int = 0
+    prev_format: Optional[str] = None
+    prev_topic: Optional[str] = None
 
 
 class TwoBotsEngine:
@@ -663,6 +665,8 @@ class TwoBotsEngine:
         engine.state.rounds_since_filler = int(data.get("rounds_since_filler", 0))
         engine.state.next_filler_at = int(data.get("next_filler_at", 0))
         engine.state.autopilot_batch_count = int(data.get("autopilot_batch_count", 0))
+        engine.state.prev_format = data.get("prev_format")
+        engine.state.prev_topic = data.get("prev_topic")
         return engine
 
     def export_state(self) -> Dict[str, Any]:
@@ -674,6 +678,8 @@ class TwoBotsEngine:
             "rounds_since_filler": self.state.rounds_since_filler,
             "next_filler_at": self.state.next_filler_at,
             "autopilot_batch_count": self.state.autopilot_batch_count,
+            "prev_format": self.state.prev_format,
+            "prev_topic": self.state.prev_topic,
         }
 
     def should_filler(self) -> bool:
@@ -1025,6 +1031,46 @@ class TwoBotsEngine:
         # Increment batch counter
         self.state.autopilot_batch_count += 1
 
+        # ---- First batch or format/topic change instructions ----
+        context_instruction = ""
+        format_label = mode_data.get("label", mode_key.replace("_", " ").title())
+        topic_display = topic if topic.lower() != "random" else "a random topic"
+
+        if self.state.autopilot_batch_count == 1:
+            # First batch — announce the format and topic
+            context_instruction = (
+                f'\nThis is the FIRST exchange. Naturally introduce the {format_label.lower()} '
+                f'and the topic ({topic_display}) — don\'t just dive in, set the scene or announce '
+                f'what you\'re doing.'
+            )
+            print(f"🎬 First batch — announcing format: {format_label}, topic: {topic_display}")
+        else:
+            # Check if format or topic changed since last batch
+            format_changed = (self.state.prev_format is not None and self.state.prev_format != mode_key)
+            topic_changed = (self.state.prev_topic is not None and self.state.prev_topic != topic)
+            if format_changed and topic_changed:
+                context_instruction = (
+                    f'\nThe format just changed to {format_label.lower()} and the topic changed to '
+                    f'{topic_display}. Acknowledge this shift naturally in your first couple of lines.'
+                )
+                print(f"🔄 Format changed: {self.state.prev_format} → {mode_key}, Topic changed: {self.state.prev_topic} → {topic}")
+            elif format_changed:
+                context_instruction = (
+                    f'\nThe format just changed to {format_label.lower()}. Acknowledge this shift '
+                    f'naturally in your first couple of lines.'
+                )
+                print(f"🔄 Format changed: {self.state.prev_format} → {mode_key}")
+            elif topic_changed:
+                context_instruction = (
+                    f'\nThe topic just changed to {topic_display}. Acknowledge this shift '
+                    f'naturally in your first couple of lines.'
+                )
+                print(f"🔄 Topic changed: {self.state.prev_topic} → {topic}")
+
+        # Update tracked format/topic for next batch comparison
+        self.state.prev_format = mode_key
+        self.state.prev_topic = topic
+
         # Build character descriptions with strength words
         strength_idx_gpt = self._s("gpt_personality_strength") or 1
         strength_idx_claude = self._s("claude_personality_strength") or 1
@@ -1058,7 +1104,7 @@ You are an extremely talented {role_name.lower()}.
 If addressing the user, say "you".
 
 [INSTRUCTIONS]
-{first_speaker_instruction}{user_instruction}
+{first_speaker_instruction}{user_instruction}{context_instruction}
 
 WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS {format_role_data.get("interaction", "INTERACTION").upper()}.
 THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
