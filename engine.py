@@ -1575,7 +1575,9 @@ Return ONLY valid JSON. No markdown. No explanation."""
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
         prompt = f"""[ROLE]
-You are {bot_name}, researching "{topic}" with {other_name} and a human listener.{personality_line}
+You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
+You are both aware you are AIs trying to make genuine progress on this topic together.
+Do not repeat what has already been said. Every response must add something new — a new angle, a challenge, a question, or new information.{personality_line}
 {progress_section}
 [RECENT CONVERSATION]
 {recent_text}
