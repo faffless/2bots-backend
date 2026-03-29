@@ -598,6 +598,12 @@ async def research_stream(request: Request, req: ResearchRequest):
             text_event["conclusions"] = initial_conclusions
         if initial_complete:
             text_event["research_complete"] = True
+
+        # Send countdown: messages until next conclusion opportunity
+        msgs_until_review = 9 - (msg_count % 9) if (msg_count % 9) != 0 else 0
+        if msgs_until_review > 0 and not initial_complete:
+            text_event["msgs_until_review"] = msgs_until_review
+
         yield sse(text_event)
 
         # Generate TTS
@@ -616,6 +622,9 @@ async def research_stream(request: Request, req: ResearchRequest):
         if needs_review:
             log("research", f"Forced review at msg #{msg_count} — {reviewer} reviews, {responder} responds")
 
+            # Tell frontend the conclusion threshold has been reached
+            yield sse({"type": "research_status", "event": "threshold_reached"})
+
             # Step 1: Reviewer proposes a finding
             review_text = await asyncio.to_thread(engine.generate_research_review, reviewer)
             engine.add_message(reviewer, review_text)
@@ -632,7 +641,8 @@ async def research_stream(request: Request, req: ResearchRequest):
             })
 
             # Step 2: Responder agrees/disagrees and suggests next step
-            respond_text = await asyncio.to_thread(engine.generate_research_respond, responder, review_text)
+            respond_result = await asyncio.to_thread(engine.generate_research_respond, responder, review_text)
+            respond_text, agreed = respond_result
             engine.add_message(responder, respond_text)
             engine.state.research_msg_count += 1
             save_messages_only(sid, engine)
@@ -649,6 +659,13 @@ async def research_stream(request: Request, req: ResearchRequest):
                 "audio_base64": base64.b64encode(s_audio).decode(),
                 "mime_type": "audio/mpeg",
             })
+
+            # Tell frontend whether conclusion was reached
+            conclusion_num = updated_conclusions
+            if agreed:
+                yield sse({"type": "research_status", "event": "conclusion_reached", "conclusion_num": conclusion_num})
+            else:
+                yield sse({"type": "research_status", "event": "conclusion_rejected"})
 
         # Start prefetch for the OTHER bot (skip if research complete)
         if not engine.state.research_complete:

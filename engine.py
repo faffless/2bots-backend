@@ -1710,7 +1710,7 @@ Do not prefix with your name. No markdown, no lists."""
         prompt = f"""You are {bot_name}. {other_name} just proposed this finding about "{topic}":
 "{review_text}"
 {conclusions_section}
-In under 30 words: agree or disagree with this finding, then state what the next research step should be. If you had autonomy and infinite resources, what would you do next?
+You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why, and state what the next research step should be.
 Do not prefix with your name. No markdown, no lists."""
 
         print(f"\n{'='*60}")
@@ -1735,18 +1735,22 @@ Do not prefix with your name. No markdown, no lists."""
                 )
                 text = resp.choices[0].message.content or "That's a reasonable conclusion."
 
-            # Store the finding as a conclusion
-            self.state.research_conclusions.append(review_text.strip())
-            num = len(self.state.research_conclusions)
-            print(f"📋 Research conclusion #{num}: {review_text.strip()}")
-            if num >= 5:
-                self.state.research_complete = True
-                print("🏁 Research complete — 5 conclusions reached!")
+            # Only store the conclusion if the responder agreed
+            agreed = text.strip().startswith("Agree")
+            if agreed:
+                self.state.research_conclusions.append(review_text.strip())
+                num = len(self.state.research_conclusions)
+                print(f"📋 Research conclusion #{num}: {review_text.strip()}")
+                if num >= 5:
+                    self.state.research_complete = True
+                    print("🏁 Research complete — 5 conclusions reached!")
+            else:
+                print(f"❌ Conclusion rejected: {review_text.strip()[:60]}...")
 
-            return text
+            return text, agreed
         except Exception as e:
             print(f"Research respond error ({who}): {e}")
-            return "I agree with that assessment. Let's move forward."
+            return "Agree — let's move forward.", True
 
     # ---- END RESEARCH PING-PONG MODE ----
 
