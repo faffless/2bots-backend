@@ -1555,14 +1555,6 @@ Return ONLY valid JSON. No markdown. No explanation."""
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
         other_name = "Claude" if who == "gpt" else "ChatGPT"
 
-        # Build personality context
-        prefix = who
-        p_key = self._s(f"{prefix}_personality") or "default"
-        p_strength = self._s(f"{prefix}_personality_strength")
-        p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
-        p_text = p_data.get(p_strength, "") if isinstance(p_data, dict) else ""
-        personality_line = f"\n{p_text}" if p_text else ""
-
         # ---- RESEARCH PING-PONG MODE ---- Build conclusions section
         conclusions_section = ""
         num_conclusions = len(self.state.research_conclusions)
@@ -1588,15 +1580,14 @@ Return ONLY valid JSON. No markdown. No explanation."""
         prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs trying to make genuine progress on this topic together.
-Do not repeat what has already been said. Every response must add something new — a new angle, a challenge, a question, or new information.{personality_line}
+Add only one new, relevant contribution that directly engages the latest message. No repetition, no paraphrase, no filler, no summary. Each reply must either introduce new information, challenge an assumption, expose a weakness, or ask the next high-value question.
 {conclusions_section}
 
 [RECENT CONVERSATION]
 {recent_text}
 
 [INSTRUCTIONS]
-Keep your response under 30 words. Do not prefix your response with your name or any label.
-No markdown, no lists."""
+Keep your response under 30 words. Do not prefix your response with your name or any label."""
 
         print(f"\n{'='*60}")
         print(f"RESEARCH PING-PONG: {bot_name}'s turn")
