@@ -153,6 +153,12 @@ class SettingsUpdate(BaseModel):
     session_id: str
     settings: Dict[str, Any]
 
+# ---- RESEARCH PING-PONG MODE ----
+class ResearchRequest(BaseModel):
+    session_id: str
+    who: str  # "gpt" or "claude" — which bot responds this turn
+# ---- END RESEARCH PING-PONG MODE ----
+
 
 # ---- Core SSE generator ----
 
@@ -518,6 +524,89 @@ async def filler_stream(request: Request, req: FillerRequest):
         yield sse({"type": "done", "filler": True, "chat_mode": True})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+# ---- RESEARCH PING-PONG MODE ----
+# Prefetch cache for research mode: stores the next bot's pre-generated response
+# Key: session_id, Value: {"who": str, "text": str, "task": asyncio.Task | None}
+RESEARCH_PREFETCH: Dict[str, Dict[str, Any]] = {}
+
+
+@app.post("/research/stream")
+@limiter.limit("20/minute")
+async def research_stream(request: Request, req: ResearchRequest):
+    """---- RESEARCH PING-PONG MODE ----
+    Generate a single response from one bot (real API call, not scripted).
+    Streams text + TTS as SSE events, same format as autopilot.
+    Also prefetches the OTHER bot's response while TTS plays."""
+    sid = req.session_id
+    who = req.who
+    log("research", f"Ping-pong turn: {who} for {sid[:8]}...")
+
+    # Check research prefetch cache first
+    cached = RESEARCH_PREFETCH.pop(sid, None)
+    if cached and cached["who"] == who and "text" in cached:
+        log("research", f"Using PREFETCHED response for {who} in {sid[:8]}...")
+        text = cached["text"]
+        engine = get_engine(sid)
+    else:
+        if cached:
+            log("research", f"Prefetch mismatch (had {cached.get('who')}, need {who}), regenerating")
+        engine = get_engine(sid)
+        text = await asyncio.to_thread(engine.generate_research_response, who)
+
+    # Add the response to conversation history
+    engine.add_message(who, text)
+    save_messages_only(sid, engine)
+
+    other = "claude" if who == "gpt" else "gpt"
+
+    async def generate():
+        voice = engine.get_gpt_voice() if who == "gpt" else engine.get_claude_voice()
+
+        # Send text event
+        yield sse({"type": "text", "speaker": who, "text": text})
+
+        # Generate TTS
+        t0 = time.time()
+        audio = await engine.generate_tts_bytes(text, voice, who)
+        t1 = time.time()
+        log(who, f"Research TTS in {t1-t0:.1f}s")
+
+        # Start prefetch for the OTHER bot while TTS streams
+        async def _prefetch_other():
+            try:
+                pf_engine = get_engine(sid)
+                pf_text = await asyncio.to_thread(pf_engine.generate_research_response, other)
+                RESEARCH_PREFETCH[sid] = {"who": other, "text": pf_text}
+                log("research", f"Prefetched {other}'s response for {sid[:8]}...")
+            except Exception as e:
+                log("research", f"Research prefetch failed: {e}")
+        asyncio.create_task(_prefetch_other())
+
+        yield sse({
+            "type": "audio", "speaker": who,
+            "audio_base64": base64.b64encode(audio).decode(),
+            "mime_type": "audio/mpeg",
+        })
+
+        # Tell frontend who goes next
+        yield sse({"type": "done", "next_who": other})
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/research/discard-prefetch")
+@limiter.limit("20/minute")
+async def research_discard_prefetch(request: Request, req: AutopilotRequest):
+    """---- RESEARCH PING-PONG MODE ----
+    Discard any prefetched research response (called when user interrupts)."""
+    sid = req.session_id
+    if sid in RESEARCH_PREFETCH:
+        log("research", f"Discarding prefetched response for {sid[:8]}... (user interrupted)")
+        del RESEARCH_PREFETCH[sid]
+    return {"ok": True}
+# ---- END RESEARCH PING-PONG MODE ----
 
 
 @app.post("/settings/update")

@@ -1512,6 +1512,94 @@ Return ONLY valid JSON. No markdown. No explanation."""
             else:
                 return [{"speaker": "claude", "text": "That's a good question, give me a moment."}]
 
+    # ---- RESEARCH PING-PONG MODE ----
+
+    def generate_research_response(self, who: str) -> str:
+        """Generate a single plain-text response from one bot for research ping-pong mode.
+
+        Instead of one AI writing a scripted batch for both bots, this sends
+        the conversation history to the specified bot and gets a genuine response.
+        Returns plain text (NOT JSON, not a batch).
+        """
+        topic = self._s("topic") or "random"
+        if topic.lower() == "random":
+            topic = "whatever you find most interesting"
+
+        # Build conversation history from gpt_msgs
+        history_lines = []
+        for m in self.state.gpt_msgs:
+            content = m["content"]
+            if m["role"] == "assistant":
+                history_lines.append(f"ChatGPT: {content}")
+            elif "[Claude]" in content:
+                history_lines.append(f"Claude: {content.replace('[Claude]: ', '')}")
+            elif "[User]" in content:
+                history_lines.append(f"User: {content.replace('[User]: ', '')}")
+            else:
+                history_lines.append(f"ChatGPT: {content}")
+        history_text = "\n".join(history_lines) if history_lines else "(No conversation yet)"
+
+        bot_name = "ChatGPT" if who == "gpt" else "Claude"
+        other_name = "Claude" if who == "gpt" else "ChatGPT"
+
+        # Build personality context
+        prefix = who
+        p_key = self._s(f"{prefix}_personality") or "default"
+        p_strength = self._s(f"{prefix}_personality_strength")
+        p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
+        p_text = p_data.get(p_strength, "") if isinstance(p_data, dict) else ""
+        personality_line = f"\n{p_text}" if p_text else ""
+
+        prompt = f"""[ROLE]
+You are {bot_name}, researching "{topic}" with {other_name} and a human listener.{personality_line}
+
+[CONVERSATION SO FAR]
+{history_text}
+
+[INSTRUCTIONS]
+Continue the research discussion naturally. Build on what was just said — agree, disagree, add new angles, ask questions, share insights.
+Talk like a real person, not an assistant. No markdown, no lists.
+Keep your response under 60 words."""
+
+        print(f"\n{'='*60}")
+        print(f"RESEARCH PING-PONG: {bot_name}'s turn")
+        print(f"{'='*60}")
+        print(prompt)
+        print(f"{'='*60}\n")
+
+        try:
+            if who == "claude":
+                # Use Claude API directly
+                resp = self.claude_client.messages.create(
+                    model=CLAUDE_MODEL,
+                    max_tokens=200,
+                    system=f"You are {bot_name} in a research conversation. Respond naturally and concisely.",
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = resp.content[0].text if resp.content else "Hmm, let me think about that."
+            else:
+                # Use GPT API directly
+                resp = self.openai_client.chat.completions.create(
+                    model=GPT_MODEL,
+                    max_tokens=200,
+                    messages=[
+                        {"role": "system", "content": f"You are {bot_name} in a research conversation. Respond naturally and concisely."},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                text = resp.choices[0].message.content or "Hmm, go on."
+
+            return inject_hesitation(text)
+
+        except Exception as e:
+            print(f"Research ping-pong error ({who}): {e}")
+            if who == "gpt":
+                return "That's a really interesting angle, let me think about that."
+            else:
+                return "You know, that raises some fascinating questions."
+
+    # ---- END RESEARCH PING-PONG MODE ----
+
     # Keep old name for backward compat
     def generate_filler_pair(self, user_text: str) -> list:
         return self.generate_bridge(user_text)
