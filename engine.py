@@ -1062,8 +1062,8 @@ Write the next {num_messages} lines of {format_role_data.get("interaction", "dia
 {first_speaker_instruction}{user_instruction}
 
 [CONSTRAINTS]
-- Never write 3 consecutive messages of similar length.
-- At least 5 messages must be under 6 words.
+- The entire dialogue MUST AVOID any visible pattern in length.
+- At least 3 messages must be under 6 words.
 - No message over 30 words.
 
 [CONVERSATION HISTORY]
@@ -1279,11 +1279,7 @@ Return ONLY valid JSON. No other text."""
         gpt_sw = strength_words.get(gpt_strength, "")
         claude_sw = strength_words.get(claude_strength, "")
 
-        # Randomize bridge length: 2, 3, or 4 lines
-        bridge_line_count = random.choice([2, 3, 4])
-
-        prompt = f"""[ROLE]
-You are an extremely talented {role_name.lower()}.
+        prompt = f"""You are writing an extremely entertaining script for an interaction between two AI bots and a User.
 
 [SETTING]
 {mode_label}
@@ -1293,17 +1289,23 @@ You are an extremely talented {role_name.lower()}.
 "C" is {f"{claude_sw} " if claude_sw else ""}{claude_traits}.
 If addressing the user, say "you".
 
-[INSTRUCTIONS]
-The user just said: "{user_text}"
-Write exactly {bridge_line_count} short lines reacting to this.
-
-[CONSTRAINTS]
-- No message over 20 words.
-- At least one message must engage the user directly.
-- At least 1 message must be under 6 words.
-
 [CONVERSATION HISTORY]
 {history_text}
+
+[INSTRUCTIONS]
+The user just said: "{user_text}"
+
+Generate a natural-sounding mini conversation — it can be 1 or 2 or 3 or 4 or 5 total messages.
+
+Format:
+- Use "gpt" for ChatGPT and "claude" for Claude as speaker labels.
+- Use only those two speaker labels.
+- Decide the number of turns, speaker order, and who starts. Feel free to choose just ONE message from one of the labels.
+
+Requirements:
+- Messages should be short, conversational, and distinct in voice.
+- At least one message must directly engage the user by asking them something, inviting their view, or responding to them personally.
+- Avoid filler and repetition.
 
 [OUTPUT]
 Return ONLY valid JSON:
