@@ -1736,7 +1736,7 @@ Do not prefix with your name. No markdown, no lists."""
                 text = resp.choices[0].message.content or "That's a reasonable conclusion."
 
             # Only store the conclusion if the responder agreed
-            agreed = text.strip().startswith("Agree")
+            agreed = text.strip().lower().startswith("agree")
             if agreed:
                 self.state.research_conclusions.append(review_text.strip())
                 num = len(self.state.research_conclusions)
