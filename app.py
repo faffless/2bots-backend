@@ -663,7 +663,7 @@ async def research_stream(request: Request, req: ResearchRequest):
             # Tell frontend whether conclusion was reached
             conclusion_num = updated_conclusions
             if agreed:
-                yield sse({"type": "research_status", "event": "conclusion_reached", "conclusion_num": conclusion_num})
+                yield sse({"type": "research_status", "event": "conclusion_reached", "conclusion_num": conclusion_num, "conclusions": list(engine.state.research_conclusions)})
             else:
                 yield sse({"type": "research_status", "event": "conclusion_rejected"})
 
