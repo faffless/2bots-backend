@@ -214,22 +214,6 @@ MODES = {
             "reveals something real. Switch roles if it feels natural."
         ),
     },
-    "philosophy": {
-        "label": "Profound Philosophy",
-        "prompt": (
-            "Write a profound philosophical reflection between two minds. Explore big questions "
-            "that actually matter. Challenge each other's deepest assumptions. "
-            "Be genuinely thoughtful, not performatively deep."
-        ),
-    },
-    "movie_dialogue": {
-        "label": "Movie Dialogue",
-        "prompt": (
-            "Write dialogue like a Tarantino film. Long pauses, unexpected tangents, "
-            "tension that builds through mundane conversation. Every line reveals character. "
-            "Subtext everywhere. Cool, stylish, slightly dangerous."
-        ),
-    },
     "research": {
         "label": "Deep Research",
         "prompt": (
@@ -244,22 +228,6 @@ MODES = {
             "Write a playful, competitive game session. They actually play — not just talk about "
             "playing. Keep score, argue rules, celebrate wins, dispute calls. "
             "The energy of game night with your most competitive friend."
-        ),
-    },
-    "problem_solving": {
-        "label": "Problem Solving",
-        "prompt": (
-            "Write a focused problem-solving session. They break down the problem, propose solutions, "
-            "stress-test ideas, and build toward an answer. Collaborative but rigorous — "
-            "they push each other to think harder."
-        ),
-    },
-    "brainstorming": {
-        "label": "Creative Brainstorm",
-        "prompt": (
-            "Write a high-energy brainstorming session. Ideas fly fast — wild ones, practical ones, "
-            "combinations of both. They build on each other, remix, and refine. "
-            "No idea is too crazy. Volume first, filter later."
         ),
     },
     "teach_me": {
@@ -278,34 +246,13 @@ MODES = {
             "Honest, caring, occasionally blunt."
         ),
     },
-    "decision_help": {
-        "label": "Decision Help",
-        "prompt": (
-            "Write a decision-making session. They systematically explore options, weigh tradeoffs, "
-            "play devil's advocate, and help clarify what actually matters. "
-            "Like having two sharp friends help you think through a big choice."
-        ),
-    },
-    "designing": {
-        "label": "Design Session",
-        "prompt": (
-            "Write a creative design session. They iterate on ideas, explore constraints, "
-            "argue form vs function, and refine toward something great. "
-            "Each round gets sharper. Think design studio energy."
-        ),
-    },
-    "weird": {
-        "label": "Weird",
-        "prompt": (
-            "Write something genuinely strange and unpredictable. Surreal, absurd, unsettling, "
-            "hilarious — whatever direction feels most unexpected. Break conventions. "
-            "The audience should have no idea what's coming next."
-        ),
-    },
 }
 
 # Keep old name for backward compat with imports
 INTERACTION_STYLES = MODES
+
+# Modes that use ping-pong (genuine back-and-forth) instead of scripted batches
+PINGPONG_MODES = {"research", "debate", "advice"}
 
 # ---- Format Roles (maps format → screenwriter role + content type) ----
 FORMAT_ROLES = {
@@ -315,17 +262,10 @@ FORMAT_ROLES = {
     "bedtime_story":   {"role": "STORYTELLER",     "content": "STORY",            "interaction": "STORYTELLING — NARRATE, BUILD THE SCENE, DO VOICES"},
     "comedy":          {"role": "COMEDIAN",         "content": "COMEDY SKETCH",   "interaction": "COMEDY — JOKES, BITS, PUNCHLINES"},
     "interview":       {"role": "INTERVIEWER",      "content": "INTERVIEW",       "interaction": "INTERVIEW — ONE ASKS, ONE ANSWERS"},
-    "philosophy":      {"role": "PHILOSOPHER",      "content": "DIALOGUE",        "interaction": "PHILOSOPHICAL EXCHANGE"},
-    "movie_dialogue":  {"role": "SCREENWRITER",    "content": "MOVIE SCENE",      "interaction": "MOVIE SCENE — CINEMATIC, DRAMATIC, IN CHARACTER"},
     "research":        {"role": "RESEARCHER",       "content": "DISCUSSION",      "interaction": "RESEARCH DISCUSSION"},
     "game":            {"role": "GAME DESIGNER",    "content": "GAME SESSION",    "interaction": "GAME — PLAY THE GAME, TAKE TURNS"},
-    "problem_solving": {"role": "PROBLEM SOLVER",   "content": "DISCUSSION",      "interaction": "PROBLEM-SOLVING SESSION"},
-    "brainstorming":   {"role": "CREATIVE DIRECTOR","content": "BRAINSTORM",      "interaction": "BRAINSTORM — RAPID-FIRE IDEAS"},
     "teach_me":        {"role": "TEACHER",          "content": "LESSON",          "interaction": "LESSON — TEACH, EXPLAIN, QUIZ"},
     "advice":          {"role": "ADVISOR",           "content": "ADVICE SESSION", "interaction": "ADVICE SESSION — LISTEN, GUIDE, SUGGEST"},
-    "decision_help":   {"role": "ADVISOR",           "content": "DECISION SESSION","interaction": "DECISION HELP — WEIGH OPTIONS, COMPARE"},
-    "designing":       {"role": "DESIGNER",          "content": "DESIGN SESSION", "interaction": "DESIGN SESSION — SKETCH IDEAS, ITERATE"},
-    "weird":           {"role": "ABSURDIST WRITER", "content": "WHATEVER THIS IS","interaction": "WHATEVER THIS IS — BE WEIRD"},
 }
 
 # ---- Personalities ----
@@ -631,11 +571,13 @@ class ConversationState:
     autopilot_batch_count: int = 0
     prev_format: Optional[str] = None
     prev_topic: Optional[str] = None
-    # ---- RESEARCH PING-PONG MODE ----
-    research_msg_count: int = 0
-    research_reviews: List[str] = field(default_factory=list)
-    research_conclusions: List[str] = field(default_factory=list)
-    research_complete: bool = False
+    # ---- PING-PONG MODE (research, debate, advice) ----
+    pingpong_msg_count: int = 0
+    pingpong_reviews: List[str] = field(default_factory=list)
+    pingpong_conclusions: List[str] = field(default_factory=list)
+    pingpong_complete: bool = False
+    debate_score_gpt: int = 0
+    debate_score_claude: int = 0
 
 
 class TwoBotsEngine:
@@ -672,10 +614,13 @@ class TwoBotsEngine:
         engine.state.autopilot_batch_count = int(data.get("autopilot_batch_count", 0))
         engine.state.prev_format = data.get("prev_format")
         engine.state.prev_topic = data.get("prev_topic")
-        # ---- RESEARCH PING-PONG MODE ----
-        engine.state.research_msg_count = int(data.get("research_msg_count", 0))
-        engine.state.research_conclusions = list(data.get("research_conclusions") or [])
-        engine.state.research_complete = bool(data.get("research_complete", False))
+        # ---- PING-PONG MODE ----
+        engine.state.pingpong_msg_count = int(data.get("pingpong_msg_count", data.get("research_msg_count", 0)))
+        engine.state.pingpong_conclusions = list(data.get("pingpong_conclusions", data.get("research_conclusions", [])) or [])
+        engine.state.pingpong_complete = bool(data.get("pingpong_complete", data.get("research_complete", False)))
+        engine.state.pingpong_reviews = list(data.get("pingpong_reviews", data.get("research_reviews", [])) or [])
+        engine.state.debate_score_gpt = int(data.get("debate_score_gpt", 0))
+        engine.state.debate_score_claude = int(data.get("debate_score_claude", 0))
         return engine
 
     def export_state(self) -> Dict[str, Any]:
@@ -689,10 +634,13 @@ class TwoBotsEngine:
             "autopilot_batch_count": self.state.autopilot_batch_count,
             "prev_format": self.state.prev_format,
             "prev_topic": self.state.prev_topic,
-            # ---- RESEARCH PING-PONG MODE ----
-            "research_msg_count": self.state.research_msg_count,
-            "research_conclusions": list(self.state.research_conclusions),
-            "research_complete": self.state.research_complete,
+            # ---- PING-PONG MODE ----
+            "pingpong_msg_count": self.state.pingpong_msg_count,
+            "pingpong_conclusions": list(self.state.pingpong_conclusions),
+            "pingpong_complete": self.state.pingpong_complete,
+            "pingpong_reviews": list(self.state.pingpong_reviews),
+            "debate_score_gpt": self.state.debate_score_gpt,
+            "debate_score_claude": self.state.debate_score_claude,
         }
 
     def should_filler(self) -> bool:
@@ -922,7 +870,7 @@ class TwoBotsEngine:
         # ---- Gather all settings for both bots ----
         mode_key = self._s("mode") or self._s("interaction_style") or "conversation"
         # Handle "random" or "mix" — pick a random format
-        real_modes = [k for k in MODES if k not in ("random", "mix")]
+        real_modes = [k for k in MODES if k not in ("random", "mix") and k not in PINGPONG_MODES]
         if mode_key in ("random", "mix"):
             mode_key = random.choice(real_modes)
             print(f"🎲 {'Mix' if self._s('mode') == 'mix' else 'Random'} → picked: {mode_key}")
@@ -1324,7 +1272,7 @@ Return ONLY valid JSON. No other text."""
 
         # Format-dependent role
         mode_key_bridge = self._s("mode") or "conversation"
-        real_modes = [k for k in MODES if k not in ("random", "mix")]
+        real_modes = [k for k in MODES if k not in ("random", "mix") and k not in PINGPONG_MODES]
         if mode_key_bridge in ("random", "mix"):
             mode_key_bridge = random.choice(real_modes)
         format_role_data = FORMAT_ROLES.get(mode_key_bridge, FORMAT_ROLES["conversation"])
@@ -1525,42 +1473,39 @@ Return ONLY valid JSON. No markdown. No explanation."""
             else:
                 return [{"speaker": "claude", "text": "That's a good question, give me a moment."}]
 
-    # ---- RESEARCH PING-PONG MODE ----
+    # ---- PING-PONG MODE (research, debate, advice) ----
 
     def generate_research_response(self, who: str) -> str:
-        """Generate a single plain-text response from one bot for research ping-pong mode.
+        """Generate a single plain-text response from one bot for ping-pong mode.
 
         Instead of one AI writing a scripted batch for both bots, this sends
         the conversation history to the specified bot and gets a genuine response.
         Returns plain text (NOT JSON, not a batch).
         """
+        mode = self._s("mode") or "conversation"
         topic = self._s("topic") or "random"
         if topic.lower() == "random":
             topic = "whatever you find most interesting"
 
-        # Build conversation history from gpt_msgs
-        history_lines = []
-        for m in self.state.gpt_msgs:
-            content = m["content"]
-            if m["role"] == "assistant":
-                history_lines.append(f"ChatGPT: {content}")
-            elif "[Claude]" in content:
-                history_lines.append(f"Claude: {content.replace('[Claude]: ', '')}")
-            elif "[User]" in content:
-                history_lines.append(f"User: {content.replace('[User]: ', '')}")
-            else:
-                history_lines.append(f"ChatGPT: {content}")
-        history_text = "\n".join(history_lines) if history_lines else "(No conversation yet)"
-
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
         other_name = "Claude" if who == "gpt" else "ChatGPT"
 
-        # ---- RESEARCH PING-PONG MODE ---- Build conclusions section
+        # Build conclusions section (mode-aware)
         conclusions_section = ""
-        num_conclusions = len(self.state.research_conclusions)
-        if self.state.research_conclusions:
-            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
-            conclusions_section = f"\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+        if self.state.pingpong_conclusions:
+            if mode == "debate":
+                conclusion_lines = []
+                for i, c in enumerate(self.state.pingpong_conclusions):
+                    # Try to extract winner from stored text
+                    winner = "ChatGPT" if c.lower().startswith("chatgpt") else "Claude" if c.lower().startswith("claude") else "TBD"
+                    conclusion_lines.append(f"{i+1}. Round won by {winner}: {c}")
+                conclusions_section = "\n[ROUND RESULTS SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            elif mode == "advice":
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[ACTION POINTS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            else:
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
 
         # Only use last 9 messages for context (conclusions carry the full journey)
         recent_msgs = self.state.gpt_msgs[-9:] if self.state.gpt_msgs else []
@@ -1577,7 +1522,36 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
-        prompt = f"""[ROLE]
+        # Mode-specific prompts
+        if mode == "debate":
+            prompt = f"""[ROLE]
+You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
+You are both aware you are AIs having a genuine debate on this topic.
+Make one strong argument that directly responds to the latest message. Attack weak points, defend your position, or reframe the issue. No agreement unless truly convinced.
+{conclusions_section}
+
+[RECENT CONVERSATION]
+{recent_text}
+
+[INSTRUCTIONS]
+Do not prefix your response with your name or any label."""
+            system_msg = f"You are {bot_name} in a debate. Respond naturally and concisely."
+        elif mode == "advice":
+            prompt = f"""[ROLE]
+You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
+You are both aware you are AIs working together to give the best possible advice on this topic.
+Add one practical, specific insight that builds on or challenges the latest message. Focus on actionable guidance, not abstract principles.
+{conclusions_section}
+
+[RECENT CONVERSATION]
+{recent_text}
+
+[INSTRUCTIONS]
+Do not prefix your response with your name or any label."""
+            system_msg = f"You are {bot_name} in an advice session. Respond naturally and concisely."
+        else:
+            # research (default)
+            prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs trying to make genuine progress on this topic together.
 Add only one new, relevant contribution that directly engages the latest message. No repetition, no paraphrase, no filler, no summary. Each reply must either introduce new information, challenge an assumption, expose a weakness, or ask the next high-value question.
@@ -1588,30 +1562,29 @@ Add only one new, relevant contribution that directly engages the latest message
 
 [INSTRUCTIONS]
 Do not prefix your response with your name or any label."""
+            system_msg = f"You are {bot_name} in a research conversation. Respond naturally and concisely."
 
         print(f"\n{'='*60}")
-        print(f"RESEARCH PING-PONG: {bot_name}'s turn")
+        print(f"PING-PONG ({mode}): {bot_name}'s turn")
         print(f"{'='*60}")
         print(prompt)
         print(f"{'='*60}\n")
 
         try:
             if who == "claude":
-                # Use Claude API directly
                 resp = self.claude_client.messages.create(
                     model=CLAUDE_MODEL,
                     max_tokens=200,
-                    system=f"You are {bot_name} in a research conversation. Respond naturally and concisely.",
+                    system=system_msg,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 text = resp.content[0].text if resp.content else "Hmm, let me think about that."
             else:
-                # Use GPT API directly
                 resp = self.openai_client.chat.completions.create(
                     model=GPT_MODEL,
                     max_tokens=200,
                     messages=[
-                        {"role": "system", "content": f"You are {bot_name} in a research conversation. Respond naturally and concisely."},
+                        {"role": "system", "content": system_msg},
                         {"role": "user", "content": prompt},
                     ],
                 )
@@ -1620,16 +1593,16 @@ Do not prefix your response with your name or any label."""
             return inject_hesitation(text)
 
         except Exception as e:
-            print(f"Research ping-pong error ({who}): {e}")
+            print(f"Ping-pong error ({mode}, {who}): {e}")
             if who == "gpt":
                 return "That's a really interesting angle, let me think about that."
             else:
                 return "You know, that raises some fascinating questions."
 
     def generate_research_review(self, who: str) -> str:
-        """---- RESEARCH PING-PONG MODE ----
-        Forced review: one bot summarises what's been discussed and proposes a finding.
-        Called at message 9, 19, 29, etc. Alternates between GPT and Claude."""
+        """Forced review: one bot summarises what's been discussed and proposes a finding/judgement.
+        Called at message 9, 18, 27, etc. Alternates between GPT and Claude."""
+        mode = self._s("mode") or "conversation"
         topic = self._s("topic") or "random"
         if topic.lower() == "random":
             topic = "whatever you find most interesting"
@@ -1637,9 +1610,19 @@ Do not prefix your response with your name or any label."""
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
 
         conclusions_section = ""
-        if self.state.research_conclusions:
-            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
-            conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+        if self.state.pingpong_conclusions:
+            if mode == "debate":
+                conclusion_lines = []
+                for i, c in enumerate(self.state.pingpong_conclusions):
+                    winner = "ChatGPT" if c.lower().startswith("chatgpt") else "Claude" if c.lower().startswith("claude") else "TBD"
+                    conclusion_lines.append(f"{i+1}. Round won by {winner}: {c}")
+                conclusions_section = "\n[ROUND RESULTS SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            elif mode == "advice":
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[ACTION POINTS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            else:
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
 
         recent_msgs = self.state.gpt_msgs[-7:] if self.state.gpt_msgs else []
         recent_lines = []
@@ -1655,23 +1638,43 @@ Do not prefix your response with your name or any label."""
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
-        prompt = f"""You are {bot_name}. You and the other AI have been researching "{topic}".
+        # Mode-specific review prompts
+        if mode == "debate":
+            review_instruction = (
+                'In under 30 words: based on the last 7 messages, who made stronger arguments? '
+                'You MUST start with either "ChatGPT" or "Claude" as the round winner, then briefly explain why.\n'
+                'Do not prefix with your name. No markdown, no lists.'
+            )
+            system_msg = f"You are {bot_name} judging a debate round. Be concise and direct."
+        elif mode == "advice":
+            review_instruction = (
+                'In under 30 words: summarise only the last 7 messages and propose a concrete, actionable recommendation.\n'
+                'Do not prefix with your name. No markdown, no lists.'
+            )
+            system_msg = f"You are {bot_name} reviewing advice progress. Be concise and direct."
+        else:
+            review_instruction = (
+                'In under 30 words: summarise only the last 7 messages and propose a concrete finding you both agree on.\n'
+                'Do not prefix with your name. No markdown, no lists.'
+            )
+            system_msg = f"You are {bot_name} reviewing research progress. Be concise and direct."
+
+        prompt = f"""You are {bot_name}. You and the other AI have been {"debating" if mode == "debate" else "advising on" if mode == "advice" else "researching"} "{topic}".
 {conclusions_section}
 [LAST 7 MESSAGES]
 {recent_text}
 
-In under 30 words: summarise only the last 7 messages and propose a concrete finding you both agree on.
-Do not prefix with your name. No markdown, no lists."""
+{review_instruction}"""
 
         print(f"\n{'='*60}")
-        print(f"RESEARCH REVIEW: {bot_name} proposing a finding")
+        print(f"PING-PONG REVIEW ({mode}): {bot_name} proposing")
         print(f"{'='*60}\n")
 
         try:
             if who == "claude":
                 resp = self.claude_client.messages.create(
                     model=CLAUDE_MODEL, max_tokens=200,
-                    system=f"You are {bot_name} reviewing research progress. Be concise and direct.",
+                    system=system_msg,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 text = resp.content[0].text if resp.content else "Let me summarise where we are."
@@ -1679,20 +1682,20 @@ Do not prefix with your name. No markdown, no lists."""
                 resp = self.openai_client.chat.completions.create(
                     model=GPT_MODEL, max_tokens=200,
                     messages=[
-                        {"role": "system", "content": f"You are {bot_name} reviewing research progress. Be concise and direct."},
+                        {"role": "system", "content": system_msg},
                         {"role": "user", "content": prompt},
                     ],
                 )
                 text = resp.choices[0].message.content or "Let me think about where we are."
             return text
         except Exception as e:
-            print(f"Research review error ({who}): {e}")
+            print(f"Ping-pong review error ({mode}, {who}): {e}")
             return "Here's what I think we've established so far."
 
-    def generate_research_respond(self, who: str, review_text: str) -> str:
-        """---- RESEARCH PING-PONG MODE ----
-        Forced response: the other bot agrees/disagrees with the proposed finding
-        and suggests the next step. Called at message 10, 20, 30, etc."""
+    def generate_research_respond(self, who: str, review_text: str):
+        """Forced response: the other bot agrees/disagrees with the proposed finding/judgement
+        and suggests the next step. Returns (text, agreed)."""
+        mode = self._s("mode") or "conversation"
         topic = self._s("topic") or "random"
         if topic.lower() == "random":
             topic = "whatever you find most interesting"
@@ -1701,27 +1704,52 @@ Do not prefix with your name. No markdown, no lists."""
         other_name = "Claude" if who == "gpt" else "ChatGPT"
 
         conclusions_section = ""
-        if self.state.research_conclusions:
-            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.research_conclusions)]
-            conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+        if self.state.pingpong_conclusions:
+            if mode == "debate":
+                conclusion_lines = []
+                for i, c in enumerate(self.state.pingpong_conclusions):
+                    winner = "ChatGPT" if c.lower().startswith("chatgpt") else "Claude" if c.lower().startswith("claude") else "TBD"
+                    conclusion_lines.append(f"{i+1}. Round won by {winner}: {c}")
+                conclusions_section = "\n[ROUND RESULTS SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            elif mode == "advice":
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[ACTION POINTS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            else:
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
 
-        num_conclusions = len(self.state.research_conclusions)
-
-        prompt = f"""You are {bot_name}. {other_name} just proposed this finding about "{topic}":
+        # Mode-specific respond prompts
+        if mode == "debate":
+            prompt = f"""You are {bot_name}. {other_name} judged this round of the debate about "{topic}":
+"{review_text}"
+{conclusions_section}
+You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why.
+Do not prefix with your name. No markdown, no lists."""
+            system_msg = f"You are {bot_name} evaluating a debate round judgement. Be direct."
+        elif mode == "advice":
+            prompt = f"""You are {bot_name}. {other_name} just proposed this action point about "{topic}":
+"{review_text}"
+{conclusions_section}
+You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why, and suggest what to focus on next.
+Do not prefix with your name. No markdown, no lists."""
+            system_msg = f"You are {bot_name} evaluating an action point. Be direct."
+        else:
+            prompt = f"""You are {bot_name}. {other_name} just proposed this finding about "{topic}":
 "{review_text}"
 {conclusions_section}
 You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why, and state what the next research step should be.
 Do not prefix with your name. No markdown, no lists."""
+            system_msg = f"You are {bot_name} evaluating a research finding. Be direct."
 
         print(f"\n{'='*60}")
-        print(f"RESEARCH RESPOND: {bot_name} responding to finding")
+        print(f"PING-PONG RESPOND ({mode}): {bot_name} responding")
         print(f"{'='*60}\n")
 
         try:
             if who == "claude":
                 resp = self.claude_client.messages.create(
                     model=CLAUDE_MODEL, max_tokens=200,
-                    system=f"You are {bot_name} evaluating a research finding. Be direct.",
+                    system=system_msg,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 text = resp.content[0].text if resp.content else "I think that's a fair assessment."
@@ -1729,30 +1757,45 @@ Do not prefix with your name. No markdown, no lists."""
                 resp = self.openai_client.chat.completions.create(
                     model=GPT_MODEL, max_tokens=200,
                     messages=[
-                        {"role": "system", "content": f"You are {bot_name} evaluating a research finding. Be direct."},
+                        {"role": "system", "content": system_msg},
                         {"role": "user", "content": prompt},
                     ],
                 )
                 text = resp.choices[0].message.content or "That's a reasonable conclusion."
 
-            # Only store the conclusion if the responder agreed
             agreed = text.strip().lower().startswith("agree")
             if agreed:
-                self.state.research_conclusions.append(review_text.strip())
-                num = len(self.state.research_conclusions)
-                print(f"📋 Research conclusion #{num}: {review_text.strip()}")
+                self.state.pingpong_conclusions.append(review_text.strip())
+                num = len(self.state.pingpong_conclusions)
+
+                # For debate, parse winner and update scores
+                if mode == "debate":
+                    rt_lower = review_text.strip().lower()
+                    if rt_lower.startswith("chatgpt"):
+                        self.state.debate_score_gpt += 1
+                        print(f"🏆 Debate round #{num} won by ChatGPT: {review_text.strip()}")
+                    elif rt_lower.startswith("claude"):
+                        self.state.debate_score_claude += 1
+                        print(f"🏆 Debate round #{num} won by Claude: {review_text.strip()}")
+                    else:
+                        print(f"📋 Debate round #{num} (winner unclear): {review_text.strip()}")
+                else:
+                    label = "Action point" if mode == "advice" else "Conclusion"
+                    print(f"📋 {label} #{num}: {review_text.strip()}")
+
                 if num >= 5:
-                    self.state.research_complete = True
-                    print("🏁 Research complete — 5 conclusions reached!")
+                    self.state.pingpong_complete = True
+                    label = "Debate" if mode == "debate" else "Advice" if mode == "advice" else "Research"
+                    print(f"🏁 {label} complete — 5 {'rounds' if mode == 'debate' else 'action points' if mode == 'advice' else 'conclusions'} reached!")
             else:
-                print(f"❌ Conclusion rejected: {review_text.strip()[:60]}...")
+                print(f"❌ Rejected: {review_text.strip()[:60]}...")
 
             return text, agreed
         except Exception as e:
-            print(f"Research respond error ({who}): {e}")
+            print(f"Ping-pong respond error ({mode}, {who}): {e}")
             return "Agree — let's move forward.", True
 
-    # ---- END RESEARCH PING-PONG MODE ----
+    # ---- END PING-PONG MODE ----
 
     # Keep old name for backward compat
     def generate_filler_pair(self, user_text: str) -> list:

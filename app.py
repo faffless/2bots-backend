@@ -125,10 +125,13 @@ def save_messages_only(sid: str, engine: TwoBotsEngine) -> None:
         SESSIONS[sid]["rounds_since_filler"] = engine.state.rounds_since_filler
         SESSIONS[sid]["next_filler_at"] = engine.state.next_filler_at
         SESSIONS[sid]["autopilot_batch_count"] = engine.state.autopilot_batch_count
-        # ---- RESEARCH PING-PONG MODE ----
-        SESSIONS[sid]["research_msg_count"] = engine.state.research_msg_count
-        SESSIONS[sid]["research_conclusions"] = list(engine.state.research_conclusions)
-        SESSIONS[sid]["research_complete"] = engine.state.research_complete
+        # ---- PING-PONG MODE ----
+        SESSIONS[sid]["pingpong_msg_count"] = engine.state.pingpong_msg_count
+        SESSIONS[sid]["pingpong_conclusions"] = list(engine.state.pingpong_conclusions)
+        SESSIONS[sid]["pingpong_complete"] = engine.state.pingpong_complete
+        SESSIONS[sid]["pingpong_reviews"] = list(engine.state.pingpong_reviews)
+        SESSIONS[sid]["debate_score_gpt"] = engine.state.debate_score_gpt
+        SESSIONS[sid]["debate_score_claude"] = engine.state.debate_score_claude
     else:
         SESSIONS[sid] = engine.export_state()
 
@@ -158,11 +161,11 @@ class SettingsUpdate(BaseModel):
     session_id: str
     settings: Dict[str, Any]
 
-# ---- RESEARCH PING-PONG MODE ----
+# ---- PING-PONG MODE ----
 class ResearchRequest(BaseModel):
     session_id: str
     who: str  # "gpt" or "claude" — which bot responds this turn
-# ---- END RESEARCH PING-PONG MODE ----
+# ---- END PING-PONG MODE ----
 
 
 # ---- Core SSE generator ----
@@ -531,7 +534,7 @@ async def filler_stream(request: Request, req: FillerRequest):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
-# ---- RESEARCH PING-PONG MODE ----
+# ---- PING-PONG MODE ----
 # Prefetch cache for research mode: stores the next bot's pre-generated response
 # Key: session_id, Value: {"who": str, "text": str, "task": asyncio.Task | None}
 RESEARCH_PREFETCH: Dict[str, Dict[str, Any]] = {}
@@ -540,7 +543,7 @@ RESEARCH_PREFETCH: Dict[str, Dict[str, Any]] = {}
 @app.post("/research/stream")
 @limiter.limit("20/minute")
 async def research_stream(request: Request, req: ResearchRequest):
-    """---- RESEARCH PING-PONG MODE ----
+    """---- PING-PONG MODE (research, debate, advice) ----
     Generate a single response from one bot (real API call, not scripted).
     Streams text + TTS as SSE events, same format as autopilot.
     Also prefetches the OTHER bot's response while TTS plays."""
@@ -560,24 +563,24 @@ async def research_stream(request: Request, req: ResearchRequest):
         engine = get_engine(sid)
         text = await asyncio.to_thread(engine.generate_research_response, who)
 
+    # Read the current mode for mode-aware events
+    mode = engine._s("mode") or "conversation"
+
     # Add the response to conversation history
     engine.add_message(who, text)
-    engine.state.research_msg_count += 1
-    msg_count = engine.state.research_msg_count
+    engine.state.pingpong_msg_count += 1
+    msg_count = engine.state.pingpong_msg_count
     save_messages_only(sid, engine)
 
     other = "claude" if who == "gpt" else "gpt"
 
-    # ---- RESEARCH PING-PONG MODE ---- Check if forced review is due
+    # Check if forced review is due
     # Every 9th message triggers a review cycle (messages 9, 18, 27...)
-    # Review cycle = 2 forced messages: review + respond
     cycle_position = msg_count % 9  # 0 means it's a 9th message
-    needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.research_complete)
+    needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.pingpong_complete)
     log("research", f"MSG COUNT: {msg_count}, cycle_position: {cycle_position}, needs_review: {needs_review}")
 
     # Determine who reviews: alternates each cycle
-    # Cycle 1 (msg 9): GPT reviews, Claude responds
-    # Cycle 2 (msg 18): Claude reviews, GPT responds
     cycle_number = msg_count // 9
     if cycle_number % 2 == 1:
         reviewer = "gpt"
@@ -586,8 +589,8 @@ async def research_stream(request: Request, req: ResearchRequest):
         reviewer = "claude"
         responder = "gpt"
 
-    initial_conclusions = len(engine.state.research_conclusions)
-    initial_complete = engine.state.research_complete
+    initial_conclusions = len(engine.state.pingpong_conclusions)
+    initial_complete = engine.state.pingpong_complete
 
     async def generate():
         voice = engine.get_gpt_voice() if who == "gpt" else engine.get_claude_voice()
@@ -597,9 +600,9 @@ async def research_stream(request: Request, req: ResearchRequest):
         if initial_conclusions > 0:
             text_event["conclusions"] = initial_conclusions
         if initial_complete:
-            text_event["research_complete"] = True
+            text_event["pingpong_complete"] = True
 
-        # Send countdown: messages until next conclusion opportunity
+        # Send countdown: messages until next review opportunity
         msgs_until_review = 9 - (msg_count % 9) if (msg_count % 9) != 0 else 0
         if msgs_until_review > 0 and not initial_complete:
             text_event["msgs_until_review"] = msgs_until_review
@@ -610,7 +613,7 @@ async def research_stream(request: Request, req: ResearchRequest):
         t0 = time.time()
         audio = await engine.generate_tts_bytes(text, voice, who)
         t1 = time.time()
-        log(who, f"Research TTS in {t1-t0:.1f}s")
+        log(who, f"Ping-pong TTS in {t1-t0:.1f}s")
 
         yield sse({
             "type": "audio", "speaker": who,
@@ -618,17 +621,17 @@ async def research_stream(request: Request, req: ResearchRequest):
             "mime_type": "audio/mpeg",
         })
 
-        # ---- RESEARCH PING-PONG MODE ---- Forced review cycle
+        # Forced review cycle
         if needs_review:
             log("research", f"Forced review at msg #{msg_count} — {reviewer} reviews, {responder} responds")
 
-            # Tell frontend the conclusion threshold has been reached
-            yield sse({"type": "research_status", "event": "threshold_reached"})
+            # Tell frontend the threshold has been reached
+            yield sse({"type": "research_status", "event": "threshold_reached", "mode": mode})
 
-            # Step 1: Reviewer proposes a finding
+            # Step 1: Reviewer proposes a finding/judgement
             review_text = await asyncio.to_thread(engine.generate_research_review, reviewer)
             engine.add_message(reviewer, review_text)
-            engine.state.research_msg_count += 1
+            engine.state.pingpong_msg_count += 1
             save_messages_only(sid, engine)
 
             review_voice = engine.get_gpt_voice() if reviewer == "gpt" else engine.get_claude_voice()
@@ -640,18 +643,18 @@ async def research_stream(request: Request, req: ResearchRequest):
                 "mime_type": "audio/mpeg",
             })
 
-            # Step 2: Responder agrees/disagrees and suggests next step
+            # Step 2: Responder agrees/disagrees
             respond_result = await asyncio.to_thread(engine.generate_research_respond, responder, review_text)
             respond_text, agreed = respond_result
             engine.add_message(responder, respond_text)
-            engine.state.research_msg_count += 1
+            engine.state.pingpong_msg_count += 1
             save_messages_only(sid, engine)
 
             respond_voice = engine.get_gpt_voice() if responder == "gpt" else engine.get_claude_voice()
-            updated_conclusions = len(engine.state.research_conclusions)
+            updated_conclusions = len(engine.state.pingpong_conclusions)
             resp_event = {"type": "text", "speaker": responder, "text": respond_text, "conclusions": updated_conclusions}
-            if engine.state.research_complete:
-                resp_event["research_complete"] = True
+            if engine.state.pingpong_complete:
+                resp_event["pingpong_complete"] = True
             yield sse(resp_event)
             s_audio = await engine.generate_tts_bytes(respond_text, respond_voice, responder)
             yield sse({
@@ -660,15 +663,32 @@ async def research_stream(request: Request, req: ResearchRequest):
                 "mime_type": "audio/mpeg",
             })
 
-            # Tell frontend whether conclusion was reached
+            # Tell frontend whether conclusion/round was reached
             conclusion_num = updated_conclusions
             if agreed:
-                yield sse({"type": "research_status", "event": "conclusion_reached", "conclusion_num": conclusion_num, "conclusions": list(engine.state.research_conclusions)})
+                status_event = {
+                    "type": "research_status",
+                    "event": "conclusion_reached",
+                    "conclusion_num": conclusion_num,
+                    "conclusions": list(engine.state.pingpong_conclusions),
+                    "mode": mode,
+                }
+                # For debate, also send scores and round winner
+                if mode == "debate":
+                    status_event["debate_score_gpt"] = engine.state.debate_score_gpt
+                    status_event["debate_score_claude"] = engine.state.debate_score_claude
+                    # Parse winner from review_text
+                    rt_lower = review_text.strip().lower()
+                    if rt_lower.startswith("chatgpt"):
+                        status_event["round_winner"] = "ChatGPT"
+                    elif rt_lower.startswith("claude"):
+                        status_event["round_winner"] = "Claude"
+                yield sse(status_event)
             else:
-                yield sse({"type": "research_status", "event": "conclusion_rejected"})
+                yield sse({"type": "research_status", "event": "conclusion_rejected", "mode": mode})
 
-        # Start prefetch for the OTHER bot (skip if research complete)
-        if not engine.state.research_complete:
+        # Start prefetch for the OTHER bot (skip if complete)
+        if not engine.state.pingpong_complete:
             async def _prefetch_other():
                 try:
                     pf_engine = get_engine(sid)
@@ -676,13 +696,16 @@ async def research_stream(request: Request, req: ResearchRequest):
                     RESEARCH_PREFETCH[sid] = {"who": other, "text": pf_text}
                     log("research", f"Prefetched {other}'s response for {sid[:8]}...")
                 except Exception as e:
-                    log("research", f"Research prefetch failed: {e}")
+                    log("research", f"Prefetch failed: {e}")
             asyncio.create_task(_prefetch_other())
 
         # Tell frontend who goes next
         done_event = {"type": "done", "next_who": other}
-        if engine.state.research_complete:
-            done_event["research_complete"] = True
+        if engine.state.pingpong_complete:
+            done_event["pingpong_complete"] = True
+            if mode == "debate":
+                done_event["debate_score_gpt"] = engine.state.debate_score_gpt
+                done_event["debate_score_claude"] = engine.state.debate_score_claude
         yield sse(done_event)
 
     return StreamingResponse(generate(), media_type="text/event-stream")
@@ -691,14 +714,13 @@ async def research_stream(request: Request, req: ResearchRequest):
 @app.post("/research/discard-prefetch")
 @limiter.limit("20/minute")
 async def research_discard_prefetch(request: Request, req: AutopilotRequest):
-    """---- RESEARCH PING-PONG MODE ----
-    Discard any prefetched research response (called when user interrupts)."""
+    """Discard any prefetched ping-pong response (called when user interrupts)."""
     sid = req.session_id
     if sid in RESEARCH_PREFETCH:
         log("research", f"Discarding prefetched response for {sid[:8]}... (user interrupted)")
         del RESEARCH_PREFETCH[sid]
     return {"ok": True}
-# ---- END RESEARCH PING-PONG MODE ----
+# ---- END PING-PONG MODE ----
 
 
 @app.post("/settings/update")
