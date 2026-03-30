@@ -1608,24 +1608,33 @@ Add only one new, relevant contribution that directly engages the latest message
         print(prompt)
         print(f"{'='*60}\n")
 
+        # No max_tokens cap for conversation mode without a word limit — let the model finish naturally
+        use_max_tokens = None if (mode == "conversation" and user_word_limit is None) else 200
+
         try:
             if who == "claude":
-                resp = self.claude_client.messages.create(
+                claude_kwargs = dict(
                     model=CLAUDE_MODEL,
-                    max_tokens=200,
                     system=system_msg,
                     messages=[{"role": "user", "content": prompt}],
                 )
+                if use_max_tokens is not None:
+                    claude_kwargs["max_tokens"] = use_max_tokens
+                else:
+                    claude_kwargs["max_tokens"] = 4096  # Claude requires max_tokens but set high
+                resp = self.claude_client.messages.create(**claude_kwargs)
                 text = resp.content[0].text if resp.content else "Hmm, let me think about that."
             else:
-                resp = self.openai_client.chat.completions.create(
+                gpt_kwargs = dict(
                     model=GPT_MODEL,
-                    max_tokens=200,
                     messages=[
                         {"role": "system", "content": system_msg},
                         {"role": "user", "content": prompt},
                     ],
                 )
+                if use_max_tokens is not None:
+                    gpt_kwargs["max_tokens"] = use_max_tokens
+                resp = self.openai_client.chat.completions.create(**gpt_kwargs)
                 text = resp.choices[0].message.content or "Hmm, go on."
 
             return inject_hesitation(text)
