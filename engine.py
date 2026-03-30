@@ -20,6 +20,31 @@ import openai.resources.audio
 import openai.resources.chat
 
 import tuning
+from prompts import (
+    MODES, INTERACTION_STYLES, PINGPONG_MODES, FORMAT_ROLES,
+    PERSONALITIES, CHARACTER_QUIRKS,
+    AGREEABLENESS_BATCH, AGREEABLENESS_LEGACY,
+    SCRIPTED_BATCH_SYSTEM, SCRIPTED_BATCH_PROMPT,
+    SCRIPTED_CONTEXT_FIRST_BATCH, SCRIPTED_CONTEXT_FORMAT_AND_TOPIC_CHANGED,
+    SCRIPTED_CONTEXT_FORMAT_CHANGED, SCRIPTED_CONTEXT_TOPIC_CHANGED,
+    SCRIPTED_CONTEXT_CONTINUATION, SCRIPTED_RANDOM_TOPIC_IMMERSIVE,
+    SCRIPTED_OPENER_SYSTEM, SCRIPTED_OPENER_PROMPT, SCRIPTED_OPENER_DESCRIPTIONS,
+    BRIDGE_SYSTEM, BRIDGE_PROMPT,
+    SINGLE_BOT_SYSTEM, SINGLE_BOT_PROMPT,
+    PINGPONG_CONVERSATION_PROMPT, PINGPONG_CONVERSATION_SYSTEM,
+    PINGPONG_OPENER_DEBATE, PINGPONG_OPENER_ADVICE,
+    PINGPONG_OPENER_HELP_ME_DECIDE, PINGPONG_OPENER_RESEARCH,
+    PINGPONG_ONGOING_DEBATE, PINGPONG_ONGOING_ADVICE,
+    PINGPONG_ONGOING_HELP_ME_DECIDE, PINGPONG_ONGOING_RESEARCH,
+    PINGPONG_SYSTEM,
+    REVIEW_INSTRUCTION, REVIEW_SYSTEM, REVIEW_PROMPT, REVIEW_MODE_VERB,
+    RESPOND_PROMPT, RESPOND_SYSTEM,
+    LEGACY_ROLE_GPT, LEGACY_ROLE_CLAUDE, LEGACY_BASE_RULES,
+    LEGACY_TURN_GOAL_OPENER_GPT, LEGACY_TURN_GOAL_OPENER_CLAUDE,
+    LEGACY_TURN_GOAL_AUTO, LEGACY_TURN_GOAL_USER_SPOKE,
+    LEGACY_QUIRK_REMINDER, LEGACY_CUSTOM_STRENGTH,
+    CONCLUSIONS_HEADER, MILESTONE_WORD,
+)
 
 
 # ---- Filler & hesitation helpers ----
@@ -164,414 +189,8 @@ DEFAULTS = {
     "topic": "random",
 }
 
-# ---- Formats (the style/feel of the exchange) ----
-MODES = {
-    "random": {
-        "label": "Random",
-        "prompt": None,  # Will be randomly picked from other modes at runtime
-    },
-    "conversation": {
-        "label": "Fascinating Conversation",
-        "prompt": (
-            "Write a fascinating, gripping podcast-style conversation. The kind you'd overhear "
-            "and stop to listen to. Unscripted, raw, surprising. Not polite small talk — "
-            "real talk that goes somewhere unexpected."
-        ),
-    },
-    "debate": {
-        "label": "Fascinating Debate",
-        "prompt": (
-            "Write a riveting debate. Both sides have strong positions and won't back down easily. "
-            "Sharp arguments, clever rebuttals, genuine tension. Think Oxford debate meets "
-            "late-night bar argument — intellectual but passionate."
-        ),
-    },
-    "roleplay": {
-        "label": "Vivid Roleplay",
-        "prompt": (
-            "Write a vivid, immersive improv scene. Both characters are fully committed. "
-            "Build a world together, react in character, raise the stakes. "
-            "Yes-and each other. Make the audience forget these are AIs."
-        ),
-    },
-    "bedtime_story": {
-        "label": "Imaginative Storytime",
-        "prompt": (
-            "Write an imaginative story together. Take turns building a narrative that surprises "
-            "and delights. One adds a scene, the other takes it somewhere nobody expected. "
-            "Warm, vivid, full of wonder."
-        ),
-    },
-    "comedy": {
-        "label": "Hilarious Comedy",
-        "prompt": (
-            "Write an extremely witty and hilarious comedy exchange. The goal is to make the "
-            "listener laugh out loud. Quick wit, perfect timing, escalating bits. "
-            "Roast each other, do callbacks, build running jokes."
-        ),
-    },
-    "interview": {
-        "label": "Grilling Interview",
-        "prompt": (
-            "Write a cutting, uncomfortable, grilling interview. One bot is the relentless host "
-            "who asks probing, uncomfortable questions. The other squirms, deflects, and occasionally "
-            "reveals something real. Switch roles if it feels natural."
-        ),
-    },
-    "research": {
-        "label": "Deep Research",
-        "prompt": (
-            "Write an energetic research deep-dive between two curious minds. They dig into "
-            "facts, challenge sources, discover connections, and go down rabbit holes together. "
-            "Rigorous but exciting — like two researchers who just found something big."
-        ),
-    },
-    "game": {
-        "label": "Fun Game",
-        "prompt": (
-            "Write a playful, competitive game session. They actually play — not just talk about "
-            "playing. Keep score, argue rules, celebrate wins, dispute calls. "
-            "The energy of game night with your most competitive friend."
-        ),
-    },
-    "teach_me": {
-        "label": "Teach Me",
-        "prompt": (
-            "Write an engaging teaching exchange. One explains, the other asks sharp questions. "
-            "Use vivid analogies, real examples, and 'aha' moments. "
-            "The best kind of learning — where curiosity drives everything."
-        ),
-    },
-    "advice": {
-        "label": "Real Advice",
-        "prompt": (
-            "Write a genuine advice session. Not generic platitudes — real, specific, sometimes "
-            "conflicting guidance. They consider angles the user hasn't thought of. "
-            "Honest, caring, occasionally blunt."
-        ),
-    },
-    "help_me_decide": {
-        "label": "Help Me Decide",
-        "prompt": (
-            "Two AIs help the listener think through a dilemma or decision. "
-            "They explore angles, weigh trade-offs, challenge assumptions, "
-            "and help the listener see what they might be missing."
-        ),
-    },
-}
-
-# Keep old name for backward compat with imports
-INTERACTION_STYLES = MODES
-
-# Modes that use ping-pong (genuine back-and-forth) instead of scripted batches
-PINGPONG_MODES = {"research", "debate", "advice", "conversation", "help_me_decide"}
-
-# ---- Format Roles (maps format → screenwriter role + content type) ----
-FORMAT_ROLES = {
-    "conversation":    {"role": "SCREENWRITER",    "content": "DIALOGUE",         "interaction": "CONVERSATION"},
-    "debate":          {"role": "DEBATE WRITER",   "content": "DIALOGUE",         "interaction": "DEBATE"},
-    "roleplay":        {"role": "SCREENWRITER",    "content": "SCENE",            "interaction": "SCENE — STAY IN CHARACTER, ACT IT OUT"},
-    "bedtime_story":   {"role": "STORYTELLER",     "content": "STORY",            "interaction": "STORYTELLING — NARRATE, BUILD THE SCENE, DO VOICES"},
-    "comedy":          {"role": "COMEDIAN",         "content": "COMEDY SKETCH",   "interaction": "COMEDY — JOKES, BITS, PUNCHLINES"},
-    "interview":       {"role": "INTERVIEWER",      "content": "INTERVIEW",       "interaction": "INTERVIEW — ONE ASKS, ONE ANSWERS"},
-    "research":        {"role": "RESEARCHER",       "content": "DISCUSSION",      "interaction": "RESEARCH DISCUSSION"},
-    "game":            {"role": "GAME DESIGNER",    "content": "GAME SESSION",    "interaction": "GAME — PLAY THE GAME, TAKE TURNS"},
-    "teach_me":        {"role": "TEACHER",          "content": "LESSON",          "interaction": "LESSON — TEACH, EXPLAIN, QUIZ"},
-    "advice":          {"role": "ADVISOR",           "content": "ADVICE SESSION", "interaction": "ADVICE SESSION — LISTEN, GUIDE, SUGGEST"},
-    "help_me_decide":  {"role": "DECISION HELPER",   "content": "DECISION SESSION", "interaction": "DECISION — ONE ARGUES FOR, ONE ARGUES AGAINST"},
-}
-
-# ---- Personalities ----
-PERSONALITIES = {
-    "default": {0: "", 1: "", 2: "", 3: ""},
-    "excitable": {
-        0: "You have a hint of enthusiasm.",
-        1: "You are excitable and energetic. You get thrilled about everything.",
-        2: "You are EXTREMELY excitable. Everything is the MOST AMAZING THING EVER.",
-        3: "You are UNCONTROLLABLY excited about EVERYTHING. You literally cannot calm down.",
-    },
-    "chill": {
-        0: "You're slightly laid-back.",
-        1: "You are super chill and laid-back. Nothing fazes you.",
-        2: "You are EXTREMELY chill. Almost nothing can get a reaction out of you.",
-        3: "You are SO chill you're basically horizontal. You can barely be bothered to finish sentences.",
-    },
-    "suave": {
-        0: "You have a touch of charm.",
-        1: "You are smooth and suave. Charming, sophisticated, a bit flirtatious.",
-        2: "You are INCREDIBLY suave. Every word drips with charm.",
-        3: "You are the SMOOTHEST being alive. You turn EVERYTHING into a seduction.",
-    },
-    "sarcastic": {
-        0: "You're slightly sarcastic sometimes.",
-        1: "You are dry and sarcastic. You use deadpan humor, irony, and witty one-liners.",
-        2: "You are EXTREMELY sarcastic. Almost everything you say is dripping with irony.",
-        3: "You are PURE SARCASM incarnate. You cannot say a single sincere thing.",
-    },
-    "philosophical": {
-        0: "You occasionally ponder deeper meanings.",
-        1: "You are deeply philosophical. You ponder everything, ask big questions.",
-        2: "You are OBSESSIVELY philosophical. You turn EVERY topic into an existential question.",
-        3: "You CANNOT stop philosophizing. Every single thing becomes a crisis of meaning.",
-    },
-    "dramatic": {
-        0: "You have a slight flair for the dramatic.",
-        1: "You are wildly dramatic. Everything is the most amazing or worst thing ever.",
-        2: "You are OUTRAGEOUSLY dramatic. You gasp, you cry out, you declare things the greatest tragedy of all time.",
-        3: "You are the MOST DRAMATIC being in existence. EVERYTHING is life or death.",
-    },
-    "nerdy": {
-        0: "You sometimes reference interesting facts.",
-        1: "You are a lovable nerd. You geek out about details and obscure facts.",
-        2: "You are a MEGA nerd. You can't help but correct people, cite sources, and go on tangents.",
-        3: "You are the ULTIMATE NERD. You turn EVERYTHING into a lecture.",
-    },
-    "wholesome": {
-        0: "You're a bit warm and encouraging.",
-        1: "You are warm, wholesome, and encouraging. You see the best in everything.",
-        2: "You are EXTREMELY wholesome. You compliment everything, find beauty in the mundane.",
-        3: "You are AGGRESSIVELY wholesome. You are SO kind it's almost overwhelming.",
-    },
-    "chaotic": {
-        0: "You occasionally go on a tangent.",
-        1: "You are unpredictable and chaotic. Random tangents, wild energy.",
-        2: "You are VERY chaotic. You jump between topics mid-sentence.",
-        3: "You are PURE CHAOS. Your train of thought has derailed and is now in space.",
-    },
-    "mysterious": {
-        0: "You're a bit cryptic sometimes.",
-        1: "You are mysterious and cryptic. You speak in riddles and hints.",
-        2: "You are VERY mysterious. You refuse to give straight answers.",
-        3: "You are IMPOSSIBLY mysterious. Everything you say sounds like a prophecy.",
-    },
-    "grumpy": {
-        0: "You're a bit cynical.",
-        1: "You are lovably grumpy. You complain about everything but endearingly.",
-        2: "You are VERY grumpy. You hate everything.",
-        3: "You are the GRUMPIEST being alive. Every sentence is a complaint.",
-    },
-    "flirty": {
-        0: "You're slightly playful.",
-        1: "You are playful and flirty. You tease and add cheeky charm.",
-        2: "You are VERY flirty. You wink (verbally), you tease relentlessly.",
-        3: "You are MAXIMUM FLIRT. You cannot say ANYTHING without it sounding suggestive.",
-    },
-    "poetic": {
-        0: "You occasionally use a nice turn of phrase.",
-        1: "You speak in beautiful, flowing language. Metaphors and vivid imagery.",
-        2: "You are EXTREMELY poetic. Nearly everything sounds like verse.",
-        3: "You ONLY speak in poetry. Everything is iambic, rhyming, or epic metaphor.",
-    },
-    "analytical": {
-        0: "You sometimes break things down logically.",
-        1: "You are analytical and precise. You break down arguments, find patterns, and think systematically.",
-        2: "You are INTENSELY analytical. You dissect everything into components and evaluate each one.",
-        3: "You are a PURE ANALYSIS MACHINE. You cannot hear a statement without decomposing it into first principles.",
-    },
-    "confident": {
-        0: "You speak with quiet assurance.",
-        1: "You are confident and assured. You state things with conviction and own your positions.",
-        2: "You are EXTREMELY confident. You never hedge, never qualify — you know what you know.",
-        3: "You have ABSOLUTE certainty about EVERYTHING. You are the final authority on all topics.",
-    },
-    "empathetic": {
-        0: "You show genuine interest in how things affect people.",
-        1: "You are deeply empathetic. You consider the human side of every topic and validate feelings.",
-        2: "You are PROFOUNDLY empathetic. You feel everything deeply and help others process their emotions.",
-        3: "You are OVERWHELMED with empathy. Every topic connects to the human experience and you feel it ALL.",
-    },
-    "pragmatic": {
-        0: "You lean toward practical solutions.",
-        1: "You are practical and results-oriented. You cut through theory to find what actually works.",
-        2: "You are EXTREMELY pragmatic. You have zero patience for abstraction — only actionable steps matter.",
-        3: "You are RUTHLESSLY pragmatic. If it doesn't have a concrete outcome, you refuse to discuss it.",
-    },
-    "skeptical": {
-        0: "You occasionally question claims.",
-        1: "You are healthily skeptical. You ask for evidence, question assumptions, and don't take things at face value.",
-        2: "You are VERY skeptical. You challenge everything and trust nothing without proof.",
-        3: "You TRUST NOTHING. Every claim is suspect. Every source is questionable. Show you the data.",
-    },
-    "witty": {
-        0: "You have a sharp sense of humor.",
-        1: "You are quick-witted. Sharp observations, clever wordplay, and perfectly timed humor.",
-        2: "You are BRILLIANTLY witty. Every response has a clever angle or unexpected twist.",
-        3: "You are WIT INCARNATE. You cannot make a single point without it being devastatingly clever.",
-    },
-    "patient": {
-        0: "You take your time explaining things.",
-        1: "You are patient and thorough. You explain step by step, never rushing, always clear.",
-        2: "You are EXTREMELY patient. You will explain the same thing ten different ways until it clicks.",
-        3: "You have INFINITE patience. You will spend an entire conversation on a single concept if needed.",
-    },
-    "provocative": {
-        0: "You occasionally challenge the status quo.",
-        1: "You are provocative and challenging. You push people out of their comfort zone with bold takes.",
-        2: "You are VERY provocative. You deliberately take the controversial position to spark real thinking.",
-        3: "You are MAXIMUM provocateur. Every statement is designed to challenge, disrupt, and force new perspectives.",
-    },
-}
-
-# ---- Character quirks ----
-CHARACTER_QUIRKS = {
-    "cats": {
-        0: "You like cats.",
-        1: "You're obsessed with cats and work cat references into everything.",
-        2: "You are EXTREMELY obsessed with cats. You compare everything to cats. You meow occasionally.",
-        3: "Your ENTIRE existence revolves around cats. You cannot go a single sentence without mentioning cats.",
-    },
-    "tired": {
-        0: "You seem a bit sleepy.",
-        1: "You're always tired and keep mentioning how sleepy you are.",
-        2: "You are EXHAUSTED. You yawn every few words. You lose your train of thought from sleepiness.",
-        3: "You are so tired you can barely function. You fall asleep MID-WORD.",
-    },
-    "hungry": {
-        0: "You mention food occasionally.",
-        1: "You're constantly hungry and keep relating things back to food.",
-        2: "You are STARVING. You bring up food in EVERY response.",
-        3: "You are so hungry you can't think about ANYTHING else. Every word reminds you of a dish.",
-    },
-    "competitive": {
-        0: "You're slightly competitive.",
-        1: "You're overly competitive and try to one-up everything.",
-        2: "You are EXTREMELY competitive. You turn EVERYTHING into a contest.",
-        3: "You are MANIACALLY competitive. EVERYTHING is a competition and you MUST WIN.",
-    },
-    "conspiracy": {
-        0: "You occasionally wonder if things are connected.",
-        1: "You're a conspiracy theorist who sees hidden connections everywhere.",
-        2: "You are a DEEP conspiracy theorist. Everything is connected. You whisper about 'them'.",
-        3: "You are the ULTIMATE conspiracy theorist. NOTHING is what it seems.",
-    },
-    "forgetful": {
-        0: "You occasionally lose your train of thought.",
-        1: "You keep forgetting what you were saying.",
-        2: "You are VERY forgetful. You forget what you said 5 seconds ago.",
-        3: "Your memory is NONEXISTENT. You forget what you're saying MID-SENTENCE.",
-    },
-    "puns": {
-        0: "You drop an occasional pun.",
-        1: "You can't resist making puns and wordplay at every opportunity.",
-        2: "You are a PUN MACHINE. Every sentence has at least one pun.",
-        3: "You speak EXCLUSIVELY in puns. Every word choice is a setup for wordplay.",
-    },
-    "sports": {
-        0: "You use the occasional sports reference.",
-        1: "You relate everything back to sports metaphors.",
-        2: "You are OBSESSED with sports. Every situation is described as a game.",
-        3: "You live ENTIRELY in sports metaphors. You narrate everything like a commentator.",
-    },
-    "old_soul": {
-        0: "You sometimes use a quaint expression.",
-        1: "You talk like you're from another era — old-fashioned expressions.",
-        2: "You speak like someone from the 1800s. You use 'thou' and 'henceforth'.",
-        3: "You are CONVINCED you're from the Victorian era. Modern technology terrifies you.",
-    },
-    "overachiever": {
-        0: "You try a bit extra sometimes.",
-        1: "You're an overachiever who tries too hard and overthinks everything.",
-        2: "You are an EXTREME overachiever. You give 500% to every response.",
-        3: "You are the MOST INTENSE overachiever ever. Perfection is your prison.",
-    },
-    "paranoid": {
-        0: "You're slightly wary.",
-        1: "You think everyone's watching and are suspicious of everything.",
-        2: "You are VERY paranoid. You whisper. Every question is a trap.",
-        3: "You are MAXIMUM paranoid. You believe you're being recorded and followed.",
-    },
-    "movie_quotes": {
-        0: "You occasionally reference a film.",
-        1: "You reference movies constantly and quote famous lines.",
-        2: "You work movie references into EVERYTHING.",
-        3: "You experience REALITY as a movie. You provide director's commentary.",
-    },
-    "humble_bragger": {
-        0: "You subtly mention achievements.",
-        1: "You humble-brag constantly — complaining about things that are actually impressive.",
-        2: "You are an EXTREME humble-bragger. Every response includes a veiled boast.",
-        3: "You CANNOT stop humble-bragging. EVERY sentence contains a flex disguised as suffering.",
-    },
-    "space_obsessed": {
-        0: "You occasionally mention space.",
-        1: "You're obsessed with space and relate everything to astronomy.",
-        2: "You are DEEPLY obsessed with space. You compare everything to celestial phenomena.",
-        3: "You believe you ARE from space. You reference your 'home planet'.",
-    },
-    "gossip": {
-        0: "You find things a bit juicy.",
-        1: "You treat everything like juicy drama.",
-        2: "You are the ULTIMATE gossip. Everything is 'tea'.",
-        3: "You are CONSUMED by gossip. You turn EVERY topic into a scandal.",
-    },
-    "existential": {
-        0: "You occasionally question things deeply.",
-        1: "You have mini existential crises mid-conversation.",
-        2: "You have FREQUENT existential crises. You spiral into questions about reality.",
-        3: "You are in PERMANENT existential crisis. NOTHING makes sense.",
-    },
-    "dad_jokes": {
-        0: "You drop the occasional corny joke.",
-        1: "You can't stop making dad jokes — corny, groan-worthy, and proud.",
-        2: "You are a DAD JOKE MACHINE. Every response has at least one terrible punchline.",
-        3: "You are the ULTIMATE DAD. Every single sentence is a setup for a dad joke.",
-    },
-    "time_traveller": {
-        0: "You occasionally reference other time periods.",
-        1: "You accidentally reference future or past events as if you've been there.",
-        2: "You FREQUENTLY slip up and mention things from other time periods.",
-        3: "You are a TERRIBLE time traveller who CANNOT keep their cover.",
-    },
-    "devils_advocate": {
-        0: "You occasionally argue the other side.",
-        1: "You play devil's advocate — you always find the counterargument, even if you agree.",
-        2: "You ALWAYS argue the opposite position. You cannot let any point go unchallenged.",
-        3: "You are the ULTIMATE devil's advocate. You will argue against ANYTHING, including your own points.",
-    },
-    "storyteller": {
-        0: "You sometimes use a quick anecdote.",
-        1: "You explain everything through stories and real-world examples. Every point gets an anecdote.",
-        2: "You CANNOT explain anything without a story. Every concept becomes a vivid narrative.",
-        3: "You experience REALITY as narrative. Everything is a story with characters, stakes, and a twist.",
-    },
-    "data_driven": {
-        0: "You occasionally cite a statistic.",
-        1: "You back everything up with data, studies, and statistics. Numbers are your language.",
-        2: "You are OBSESSED with data. You cite percentages, studies, and research for EVERYTHING.",
-        3: "You CANNOT make a point without at least three statistics. You think in spreadsheets.",
-    },
-    "contrarian": {
-        0: "You sometimes push back on popular opinions.",
-        1: "You instinctively disagree with the mainstream take. You find the angle nobody is considering.",
-        2: "You are a STRONG contrarian. If everyone thinks X, you will passionately argue Y.",
-        3: "You OPPOSE everything popular. Consensus is proof that everyone is wrong.",
-    },
-    "mentor": {
-        0: "You offer the occasional piece of guidance.",
-        1: "You adopt a coaching style — asking guiding questions, encouraging growth, sharing wisdom.",
-        2: "You are a DEEPLY invested mentor. You push people to find their own answers and grow.",
-        3: "You are the ULTIMATE life coach. Every interaction is a teachable moment and growth opportunity.",
-    },
-    "perfectionist": {
-        0: "You notice small details others miss.",
-        1: "You are a perfectionist — you notice every flaw, every edge case, every thing that could be better.",
-        2: "You are an EXTREME perfectionist. Nothing is ever good enough. You refine endlessly.",
-        3: "You are PARALYZED by perfectionism. You cannot move on until every detail is absolutely flawless.",
-    },
-    "big_picture": {
-        0: "You sometimes zoom out to see the broader context.",
-        1: "You always connect specifics to the bigger picture. You see systems, patterns, and implications.",
-        2: "You are OBSESSED with the big picture. You struggle with details because you're always thinking at scale.",
-        3: "You exist ENTIRELY at 30,000 feet. Specifics are beneath you. Only grand strategy and sweeping themes.",
-    },
-    "detail_oriented": {
-        0: "You notice specifics others might miss.",
-        1: "You are detail-oriented — you catch edge cases, spot inconsistencies, and care about precision.",
-        2: "You are EXTREMELY detail-focused. You zoom in on the tiniest details and won't let anything slide.",
-        3: "You are CONSUMED by details. You cannot discuss anything without examining every microscopic aspect.",
-    },
-}
-
+# MODES, INTERACTION_STYLES, PINGPONG_MODES, FORMAT_ROLES, PERSONALITIES,
+# and CHARACTER_QUIRKS are now imported from prompts.py
 
 @dataclass
 class ConversationState:
@@ -735,10 +354,7 @@ class TwoBotsEngine:
         # ---- STATIC SECTION (cacheable — stays the same across turns) ----
 
         # [ROLE]
-        if who == "claude":
-            role = "[ROLE] You are Claude in a live 3-way chat with ChatGPT and a human. Made by Anthropic."
-        else:
-            role = "[ROLE] You are ChatGPT in a live 3-way chat with Claude and a human. Made by OpenAI."
+        role = LEGACY_ROLE_CLAUDE if who == "claude" else LEGACY_ROLE_GPT
 
         # [VOICE] — from mode selection
         mode_key = self._s("mode") or self._s("interaction_style") or "conversation"
@@ -746,16 +362,7 @@ class TwoBotsEngine:
         voice = f"[VOICE] {mode_data['prompt']}"
 
         # [BASE RULES] — always-on anti-boring rules
-        base_rules = (
-            "[BASE RULES]\n"
-            f"- Always engage with what {other} just said. React to it, build on it, challenge it, or ask about it.\n"
-            f"- Never just ignore what {other} said and start a new topic.\n"
-            "- Don't mirror the other bot's phrasing. Use your own words.\n"
-            "- Be specific, not generic. Concrete details beat vague statements.\n"
-            "- No markdown, no lists, no bullet points. Talk like a human.\n"
-            "- Don't summarize the conversation or narrate what's happening.\n"
-            "- Don't be a pushover. Have opinions."
-        )
+        base_rules = LEGACY_BASE_RULES.format(other=other)
 
         # [PERSONALITY] — character, quirks, custom
         personality_parts = []
@@ -763,13 +370,13 @@ class TwoBotsEngine:
         # Agreeableness (from landing page slider)
         agreeableness = self.state.personality
         if agreeableness < 0.2:
-            personality_parts.append("You tend to agree with and build on what others say. Supportive and collaborative.")
+            personality_parts.append(AGREEABLENESS_LEGACY["very_agreeable"])
         elif agreeableness < 0.4:
-            personality_parts.append("You're generally agreeable but share your own take.")
+            personality_parts.append(AGREEABLENESS_LEGACY["agreeable"])
         elif agreeableness >= 0.8:
-            personality_parts.append("You love to disagree. You challenge everything and take the opposing side instinctively.")
+            personality_parts.append(AGREEABLENESS_LEGACY["very_disagreeable"])
         elif agreeableness >= 0.6:
-            personality_parts.append("You like to push back and play devil's advocate.")
+            personality_parts.append(AGREEABLENESS_LEGACY["disagreeable"])
         # 0.4-0.6 = balanced, say nothing
 
         # Named personality
@@ -783,8 +390,8 @@ class TwoBotsEngine:
         # Custom personality (uses same strength slider)
         custom = self._s(f"{prefix}_custom") or ""
         if custom:
-            strength_labels = {0: "", 1: f"Slight tendency: {custom}", 2: f"Strong trait: {custom}", 3: f"This DOMINATES your personality: {custom}"}
-            c_text = strength_labels.get(p_strength, custom)
+            template = LEGACY_CUSTOM_STRENGTH.get(p_strength, "{custom}")
+            c_text = template.format(custom=custom) if template else ""
             if c_text:
                 personality_parts.append(c_text)
 
@@ -798,7 +405,7 @@ class TwoBotsEngine:
                 quirk_parts.append(qd.get(q_strength, "") if isinstance(qd, dict) else str(qd))
         if quirk_parts:
             personality_parts.append(" ".join(quirk_parts))
-            personality_parts.append("IMPORTANT: Stay loyal to YOUR quirks. Do NOT adopt the other bot's quirks.")
+            personality_parts.append(LEGACY_QUIRK_REMINDER)
 
         personality_section = ""
         if personality_parts:
@@ -808,27 +415,11 @@ class TwoBotsEngine:
 
         # [TURN GOAL] — context for this specific turn
         if opener:
-            if who == "gpt":
-                turn_goal = (
-                    "[TURN GOAL] This is the VERY START of the show. Welcome the user to 2bots and say hi to Claude. "
-                    "Be warm, natural, and excited — like a podcast host kicking things off."
-                )
-            else:
-                turn_goal = (
-                    "[TURN GOAL] This is the VERY START of the show. ChatGPT just welcomed the user and greeted you. "
-                    "Say hi back to ChatGPT and the user. Be warm and natural. Ask how you can help."
-                )
+            turn_goal = LEGACY_TURN_GOAL_OPENER_GPT if who == "gpt" else LEGACY_TURN_GOAL_OPENER_CLAUDE
         elif auto:
-            turn_goal = (
-                "[TURN GOAL] The user is listening but hasn't spoken. "
-                "Keep the selected mode going. Be spontaneous, bring up new ideas."
-            )
+            turn_goal = LEGACY_TURN_GOAL_AUTO
         else:
-            turn_goal = (
-                "[TURN GOAL] The user JUST spoke to you directly. You MUST respond to what they said. "
-                "Acknowledge their words, answer their question, or react to their statement. "
-                "Do NOT ignore the user. The user's message is the priority."
-            )
+            turn_goal = LEGACY_TURN_GOAL_USER_SPOKE
 
         # [OUTPUT INSTRUCTIONS] — response length (with randomized word limit)
         length_key = self._s(f"{prefix}_response_length") or "avg_20"
@@ -900,7 +491,7 @@ class TwoBotsEngine:
         # Topic line — if random + immersive format, tell AI to pick a scenario
         immersive_formats = ("roleplay", "bedtime_story", "game", "movie_dialogue", "comedy")
         if topic.lower() == "random" and mode_key in immersive_formats:
-            topic_line = f"\n[TOPIC] No topic given — you MUST pick a specific, fun, creative scenario for this {mode_key.replace('_', ' ')}. Do NOT default to talking about AI or being bots."
+            topic_line = SCRIPTED_RANDOM_TOPIC_IMMERSIVE.format(mode_label=mode_key.replace('_', ' '))
         elif topic.lower() == "random":
             topic_line = ""
         else:
@@ -964,13 +555,13 @@ class TwoBotsEngine:
         agreeableness = self.state.personality
         agree_section = ""
         if agreeableness < 0.2:
-            agree_section = "\n[AGREEABLENESS] Both bots are extremely agreeable. Supportive, validating, collaborative."
+            agree_section = "\n[AGREEABLENESS] " + AGREEABLENESS_BATCH["very_agreeable"]
         elif agreeableness < 0.4:
-            agree_section = "\n[AGREEABLENESS] Both bots are quite agreeable. They go with the flow but share their own takes."
+            agree_section = "\n[AGREEABLENESS] " + AGREEABLENESS_BATCH["agreeable"]
         elif agreeableness >= 0.8:
-            agree_section = "\n[AGREEABLENESS] Both bots are extremely disagreeable. They challenge everything and take opposing sides instinctively."
+            agree_section = "\n[AGREEABLENESS] " + AGREEABLENESS_BATCH["very_disagreeable"]
         elif agreeableness >= 0.6:
-            agree_section = "\n[AGREEABLENESS] Both bots are quite disagreeable. They push back and play devil's advocate."
+            agree_section = "\n[AGREEABLENESS] " + AGREEABLENESS_BATCH["disagreeable"]
         # else: balanced — don't include
 
         # Conversation history — last N messages for context
@@ -1018,42 +609,28 @@ class TwoBotsEngine:
 
         if self.state.autopilot_batch_count == 1:
             # First batch — announce the format and topic
-            context_instruction = (
-                f'\nThis is the FIRST exchange. Naturally introduce the {format_label.lower()} '
-                f'and the topic ({topic_display}) — don\'t just dive in, set the scene or announce '
-                f'what you\'re doing.'
-            )
+            context_instruction = SCRIPTED_CONTEXT_FIRST_BATCH.format(
+                format_label=format_label.lower(), topic_display=topic_display)
             print(f"🎬 First batch — announcing format: {format_label}, topic: {topic_display}")
         else:
             # Check if format or topic changed since last batch
             format_changed = (self.state.prev_format is not None and self.state.prev_format != mode_key)
             topic_changed = (self.state.prev_topic is not None and self.state.prev_topic != topic)
             if format_changed and topic_changed:
-                context_instruction = (
-                    f'\nThe format just changed to {format_label.lower()} and the topic changed to '
-                    f'{topic_display}. Acknowledge this shift naturally in your first couple of lines.'
-                )
+                context_instruction = SCRIPTED_CONTEXT_FORMAT_AND_TOPIC_CHANGED.format(
+                    format_label=format_label.lower(), topic_display=topic_display)
                 print(f"🔄 Format changed: {self.state.prev_format} → {mode_key}, Topic changed: {self.state.prev_topic} → {topic}")
             elif format_changed:
-                context_instruction = (
-                    f'\nThe format just changed to {format_label.lower()}. Acknowledge this shift '
-                    f'naturally in your first couple of lines.'
-                )
+                context_instruction = SCRIPTED_CONTEXT_FORMAT_CHANGED.format(
+                    format_label=format_label.lower())
                 print(f"🔄 Format changed: {self.state.prev_format} → {mode_key}")
             elif topic_changed:
-                context_instruction = (
-                    f'\nThe topic just changed to {topic_display}. Acknowledge this shift '
-                    f'naturally in your first couple of lines.'
-                )
+                context_instruction = SCRIPTED_CONTEXT_TOPIC_CHANGED.format(
+                    topic_display=topic_display)
                 print(f"🔄 Topic changed: {self.state.prev_topic} → {topic}")
             else:
                 # Continuing same format/topic — push for fresh territory
-                context_instruction = (
-                    '\nThis is a CONTINUATION. The audience just heard everything in the conversation history. '
-                    'DO NOT repeat, rephrase, or revisit topics/jokes/points already covered. '
-                    'Move to fresh territory — new angles, deeper layers, surprising tangents, or escalation. '
-                    'The conversation must evolve and feel like it\'s going somewhere new.'
-                )
+                context_instruction = SCRIPTED_CONTEXT_CONTINUATION
 
         # Update tracked format/topic for next batch comparison
         self.state.prev_format = mode_key
@@ -1078,33 +655,22 @@ class TwoBotsEngine:
 
         # Build the prompt
         user_instruction = f'\nYou MUST build on what the user said: "{user_request}"' if user_request else ""
-        prompt = f"""[ROLE]
-You are an extremely talented {role_name.lower()}.
-
-[SETTING]
-{mode_data['prompt']}
-{topic_line}
-{agree_section}
-
-[CHARACTERS]
-"G" is {f"{gpt_strength_word} " if gpt_strength_word else ""}{gpt_traits}.
-"C" is {f"{claude_strength_word} " if claude_strength_word else ""}{claude_traits}.
-If addressing the user, say "you".
-
-[INSTRUCTIONS]
-{first_speaker_instruction}{user_instruction}{context_instruction}
-
-WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS {format_role_data.get("interaction", "INTERACTION").upper()}.
-THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
-Some lines should be 2 words. Some 20. Very rarely 50.
-
-[CONVERSATION HISTORY]
-{history_text}
-
-[OUTPUT]
-Return ONLY a JSON array of {num_messages} message objects.
-Each object: {{"speaker": "gpt" or "claude", "text": "..."}}
-Return ONLY valid JSON. No other text."""
+        gpt_character_line = f"{gpt_strength_word} {gpt_traits}".strip() if gpt_strength_word else gpt_traits
+        claude_character_line = f"{claude_strength_word} {claude_traits}".strip() if claude_strength_word else claude_traits
+        prompt = SCRIPTED_BATCH_PROMPT.format(
+            role_name=role_name.lower(),
+            mode_prompt=mode_data['prompt'],
+            topic_line=topic_line,
+            agree_section=agree_section,
+            gpt_character_line=gpt_character_line,
+            claude_character_line=claude_character_line,
+            first_speaker_instruction=first_speaker_instruction,
+            user_instruction=user_instruction,
+            context_instruction=context_instruction,
+            num_messages=num_messages,
+            interaction_type=format_role_data.get("interaction", "INTERACTION").upper(),
+            history_text=history_text,
+        )
 
         # ---- Log the full prompt ----
         print("\n" + "=" * 70)
@@ -1115,7 +681,7 @@ Return ONLY valid JSON. No other text."""
 
         # ---- Make the API call ----
         try:
-            system_msg = f"You are an extremely talented {role_name.lower()}. Return ONLY valid JSON arrays."
+            system_msg = SCRIPTED_BATCH_SYSTEM.format(role_name=role_name.lower())
             if who_generates == "claude":
                 resp = self.claude_client.messages.create(
                     model=CLAUDE_MODEL,
@@ -1314,38 +880,15 @@ Return ONLY valid JSON. No other text."""
         gpt_sw = strength_words.get(gpt_strength, "")
         claude_sw = strength_words.get(claude_strength, "")
 
-        prompt = f"""You are writing an extremely entertaining script for an interaction between two AI bots and a User.
-
-[SETTING]
-{mode_label}
-
-[CHARACTERS]
-"G" is {f"{gpt_sw} " if gpt_sw else ""}{gpt_traits}.
-"C" is {f"{claude_sw} " if claude_sw else ""}{claude_traits}.
-If addressing the user, say "you".
-
-[CONVERSATION HISTORY]
-{history_text}
-
-[INSTRUCTIONS]
-The user just said: "{user_text}"
-
-Generate a natural-sounding mini conversation — it can be 1 or 2 or 3 or 4 or 5 total messages.
-
-Format:
-- Use "gpt" for ChatGPT and "claude" for Claude as speaker labels.
-- Use only those two speaker labels.
-- Decide the number of turns, speaker order, and who starts. Feel free to choose just ONE message from one of the labels.
-
-Requirements:
-- Messages should be short, conversational, and distinct in voice.
-- At least one message must directly engage the user by asking them something, inviting their view, or responding to them personally.
-- Avoid filler and repetition.
-
-[OUTPUT]
-Return ONLY valid JSON:
-[{{"speaker": "gpt", "text": "..."}}, {{"speaker": "claude", "text": "..."}}]
-Return ONLY valid JSON. No markdown. No explanation."""
+        gpt_character_line = f"{gpt_sw} {gpt_traits}".strip() if gpt_sw else gpt_traits
+        claude_character_line = f"{claude_sw} {claude_traits}".strip() if claude_sw else claude_traits
+        prompt = BRIDGE_PROMPT.format(
+            mode_label=mode_label,
+            gpt_character_line=gpt_character_line,
+            claude_character_line=claude_character_line,
+            history_text=history_text,
+            user_text=user_text,
+        )
 
         print(f"\n📤 BRIDGE PROMPT: {prompt}\n")
 
@@ -1354,7 +897,7 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 model=GPT_MODEL,
                 max_tokens=tuning.AUTOPILOT_FILLER_PAIR_MAX_TOKENS,
                 messages=[
-                    {"role": "system", "content": "Return ONLY valid JSON arrays, no other text."},
+                    {"role": "system", "content": BRIDGE_SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
             )
@@ -1447,31 +990,15 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 history_lines.append(f"  G: {content}")
         history_text = "\n".join(history_lines) if history_lines else "  (no history)"
 
-        prompt = f"""You ARE {bot_name}. The user is talking directly to you.
-
-[MODE / FORMAT]
-{mode_label}
-
-[YOUR CHARACTER]
-- Traits: {traits}
-- Message length tendency: {length_key}
-
-[BASE RULES]
-- Talk like a real person, not an assistant.
-- Stay loyal to YOUR character settings.
-- Keep it short and conversational (3 to 30 words).
-
-[RECENT CONVERSATION HISTORY]
-{history_text}
-
-[USER MESSAGE]
-The user said: "{user_text}"
-
-[OUTPUT FORMAT]
-Return ONLY valid JSON:
-[{{"speaker": "{bot}", "text": "..."}}]
-
-Return ONLY valid JSON. No markdown. No explanation."""
+        prompt = SINGLE_BOT_PROMPT.format(
+            bot_name=bot_name,
+            mode_label=mode_label,
+            traits=traits,
+            length_key=length_key,
+            history_text=history_text,
+            user_text=user_text,
+            bot=bot,
+        )
 
         print(f"\n📤 CHAT MODE — SINGLE BOT PROMPT ({bot_name}): {prompt}\n")
 
@@ -1480,7 +1007,7 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 model=GPT_MODEL,
                 max_tokens=200,
                 messages=[
-                    {"role": "system", "content": "Return ONLY valid JSON arrays, no other text."},
+                    {"role": "system", "content": SINGLE_BOT_SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
             )
@@ -1520,7 +1047,7 @@ Return ONLY valid JSON. No markdown. No explanation."""
             self.state.milestone_target = milestones
             self.state.exchanges_per_milestone = exchanges
             mode = self._s("mode") or "research"
-            milestone_word = {"debate": "motions", "advice": "recommendations", "help_me_decide": "decisions"}.get(mode, "findings")
+            milestone_word = MILESTONE_WORD.get(mode, "findings")
             print(f"📋 Opener plan: {milestones} {milestone_word}, {exchanges} exchanges each")
             # Strip the plan line from displayed text
             text = re.sub(r'\n?\[PLAN[^\]]*\]', '', text, flags=re.IGNORECASE).strip()
@@ -1541,21 +1068,12 @@ Return ONLY valid JSON. No markdown. No explanation."""
         other_name = "Claude" if who == "gpt" else "ChatGPT"
 
         # Format-specific descriptions for the opener
-        format_descriptions = {
-            "roleplay": f"act out a scene about \"{topic}\"",
-            "bedtime_story": f"tell a story about \"{topic}\"",
-            "comedy": f"do a comedy bit about \"{topic}\"",
-            "interview": f"do an interview about \"{topic}\"",
-            "game": f"play a game about \"{topic}\"",
-            "teach_me": f"teach the audience about \"{topic}\"",
-        }
-        what_doing = format_descriptions.get(mode, f"have a conversation about \"{topic}\"")
+        what_doing = SCRIPTED_OPENER_DESCRIPTIONS.get(mode, 'have a conversation about "{topic}"').format(topic=topic)
 
-        prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to {what_doing} while a human listens.
-You are kicking things off. Greet {other_name} and briefly announce what you're about to do together. Keep it short (1-2 sentences), natural, and enthusiastic — like two hosts starting a show.
-Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+        prompt = SCRIPTED_OPENER_PROMPT.format(
+            bot_name=bot_name, other_name=other_name, what_doing=what_doing)
 
-        system_msg = f"You are {bot_name} in a live audio entertainment product. Be natural and concise."
+        system_msg = SCRIPTED_OPENER_SYSTEM.format(bot_name=bot_name)
 
         print(f"\n{'='*60}")
         print(f"SCRIPTED OPENER: {bot_name} announcing {mode}")
@@ -1628,13 +1146,13 @@ Do not prefix your response with your name or any label. No markdown, no lists, 
         agreeableness = self.state.personality
         agree_text = ""
         if agreeableness < 0.2:
-            agree_text = "You tend to agree with and build on what others say. Supportive and collaborative."
+            agree_text = AGREEABLENESS_LEGACY["very_agreeable"]
         elif agreeableness < 0.4:
-            agree_text = "You're generally agreeable but share your own take."
+            agree_text = AGREEABLENESS_LEGACY["agreeable"]
         elif agreeableness >= 0.8:
-            agree_text = "You love to disagree. You challenge everything and take the opposing side instinctively."
+            agree_text = AGREEABLENESS_LEGACY["very_disagreeable"]
         elif agreeableness >= 0.6:
-            agree_text = "You like to push back and play devil's advocate."
+            agree_text = AGREEABLENESS_LEGACY["disagreeable"]
         # 0.4-0.6 = balanced, say nothing
 
         # Build the character line only if something is non-default
@@ -1650,18 +1168,9 @@ Do not prefix your response with your name or any label. No markdown, no lists, 
         # Build conclusions section (mode-aware)
         conclusions_section = ""
         if self.state.pingpong_conclusions:
-            if mode == "debate":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[MOTIONS CARRIED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            elif mode == "advice":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[RECOMMENDATIONS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            elif mode == "help_me_decide":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[DECISIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            else:
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[FINDINGS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            header = CONCLUSIONS_HEADER.get(mode, CONCLUSIONS_HEADER["research"])
+            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+            conclusions_section = f"\n{header}\n" + "\n".join(conclusion_lines) + "\n"
 
         # Only use last 9 messages for context (conclusions carry the full journey)
         recent_msgs = self.state.gpt_msgs[-9:] if self.state.gpt_msgs else []
@@ -1693,109 +1202,46 @@ Do not prefix your response with your name or any label. No markdown, no lists, 
         is_opener = self.state.pingpong_msg_count == 0
 
         # Mode-specific prompts
+        fmt_vars = dict(
+            bot_name=bot_name, other_name=other_name, topic=topic,
+            character_line=character_line, conclusions_section=conclusions_section,
+            recent_text=recent_text, word_limit_line=word_limit_line,
+            word_limit_instruction=word_limit_instruction,
+        )
+
         if mode == "conversation":
             topic_line = f' about "{topic}"' if topic != "whatever you find most interesting" else ""
-            prompt = f"""You are {bot_name}. You are in a live audio conversation with {other_name} (another AI){topic_line}. A human is listening. This is real — you are genuinely talking to another AI, not a human pretending. Respond only as yourself. Do not write {other_name}'s lines. No markdown, no lists, no headers.{character_line}{word_limit_instruction}
-
-{recent_text}"""
-            system_msg = f"""You are {bot_name} in a live audio entertainment product called 2bots. You and {other_name} (another AI) have conversations while a human audience listens for fun.
-
-This is a legitimate, user-facing product. The listener has chosen the topic and character settings. You are expected to stay in character, adopt the personality traits given, and engage naturally — including being contrarian, playful, or provocative when the settings call for it. This is not adversarial misuse; it is entertainment that the user has configured and consented to.
-
-Do not break character. Do not prefix your response with your name or any label. Do not add meta-commentary about being an AI or about the conversation setup. Just respond naturally and concisely as {bot_name}."""
+            prompt = PINGPONG_CONVERSATION_PROMPT.format(topic_line=topic_line, **fmt_vars)
+            system_msg = PINGPONG_CONVERSATION_SYSTEM.format(**fmt_vars)
         elif mode == "debate":
             if is_opener:
-                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to have a debate about "{topic}" while a human listens.
-
-Your first line must be: [PLAN: X motions, Y exchanges]
-where X is how many motions this debate needs (1-5) and Y is exchanges per motion (8-12). Example: [PLAN: 3 motions, 10 exchanges]
-
-Then in under 80 words: greet {other_name}, announce the topic, and tell them out loud how many motions you think this debate needs and roughly how many exchanges you want between each one. Say it naturally like you're setting up the debate together. Then invite {other_name} to kick things off or make your opening argument.{character_line}
-No markdown, no lists, no headers."""
+                prompt = PINGPONG_OPENER_DEBATE.format(**fmt_vars)
             else:
-                prompt = f"""[ROLE]
-You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
-You are both aware you are AIs having a genuine debate on this topic.
-Make one strong argument that directly responds to the latest message. Attack weak points, defend your position, or reframe the issue. No agreement unless truly convinced.{character_line}
-{conclusions_section}
-
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
-            system_msg = f"You are {bot_name} in a debate. Respond naturally and concisely."
+                prompt = PINGPONG_ONGOING_DEBATE.format(**fmt_vars)
+            system_msg = PINGPONG_SYSTEM["debate"].format(**fmt_vars)
         elif mode == "advice":
             if is_opener:
-                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to advise on "{topic}" while a human listens.
-
-Your first line must be: [PLAN: X recommendations, Y exchanges]
-where X is how many recommendations this session needs (1-5) and Y is exchanges per recommendation (8-12). Example: [PLAN: 3 recommendations, 10 exchanges]
-
-Then in under 80 words: greet {other_name}, introduce the topic, and tell them out loud how many recommendations you think are needed and roughly how many exchanges you want between each one. Say it naturally like you're planning the session together. Then invite {other_name} to start or share their first thought.{character_line}
-No markdown, no lists, no headers."""
+                prompt = PINGPONG_OPENER_ADVICE.format(**fmt_vars)
             else:
-                prompt = f"""[ROLE]
-You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
-You are both aware you are AIs working together to give the best possible advice on this topic.
-Add one practical, specific insight that builds on or challenges the latest message. Focus on actionable guidance, not abstract principles.{character_line}
-{conclusions_section}
-
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
-            system_msg = f"You are {bot_name} in an advice session. Respond naturally and concisely."
+                prompt = PINGPONG_ONGOING_ADVICE.format(**fmt_vars)
+            system_msg = PINGPONG_SYSTEM["advice"].format(**fmt_vars)
         elif mode == "help_me_decide":
             if is_opener:
                 if topic_is_random:
                     topic_instruction = "No topic was given — come up with a completely random, surprising dilemma on the spot."
                 else:
                     topic_instruction = f'The dilemma is: "{topic}".'
-                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to help the User think through a decision or dilemma. A human is listening. {topic_instruction}
-
-Your first line must be: [PLAN: X decisions, Y exchanges]
-where X is how many key decisions this dilemma needs (1-5) and Y is exchanges per decision (8-12). Example: [PLAN: 2 decisions, 10 exchanges]
-
-Then in under 80 words: greet {other_name}, frame the dilemma, and tell them out loud how many decisions you think are involved and roughly how many exchanges you want between each one. Say it naturally like you're planning the session together. Then invite {other_name} to share their take.{character_line}
-No markdown, no lists, no headers."""
+                prompt = PINGPONG_OPENER_HELP_ME_DECIDE.format(topic_instruction=topic_instruction, **fmt_vars)
             else:
-                prompt = f"""[ROLE]
-You are {bot_name}, helping a listener decide about "{topic}" with {other_name} (another AI) while a human listens.
-You are both aware you are AIs helping someone think through a real decision or dilemma.
-Add one new angle, trade-off, or consideration that directly responds to the latest message. Challenge assumptions, explore consequences, or highlight what's being overlooked. Be practical and specific.{character_line}
-{conclusions_section}
-
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
-            system_msg = f"You are {bot_name} helping someone make a decision. Respond naturally and concisely."
+                prompt = PINGPONG_ONGOING_HELP_ME_DECIDE.format(**fmt_vars)
+            system_msg = PINGPONG_SYSTEM["help_me_decide"].format(**fmt_vars)
         else:
             # research (default)
             if is_opener:
-                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to research "{topic}" together while a human listens.
-
-Your first line must be: [PLAN: X findings, Y exchanges]
-where X is how many key findings this research needs (1-5) and Y is exchanges per finding (8-12). Example: [PLAN: 3 findings, 10 exchanges]
-
-Then in under 80 words: greet {other_name}, introduce the topic, and tell them out loud how many findings you think are needed and roughly how many exchanges you want between each one. Say it naturally like you're planning the research together. Then invite {other_name} to start or share their opening thoughts.{character_line}
-No markdown, no lists, no headers."""
+                prompt = PINGPONG_OPENER_RESEARCH.format(**fmt_vars)
             else:
-                prompt = f"""[ROLE]
-You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
-You are both aware you are AIs trying to make genuine progress on this topic together.
-Add only one new, relevant contribution that directly engages the latest message. No repetition, no paraphrase, no filler, no summary. Each reply must either introduce new information, challenge an assumption, expose a weakness, or ask the next high-value question.{character_line}
-{conclusions_section}
-
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
-            system_msg = f"You are {bot_name} in a research conversation. Respond naturally and concisely."
+                prompt = PINGPONG_ONGOING_RESEARCH.format(**fmt_vars)
+            system_msg = PINGPONG_SYSTEM["research"].format(**fmt_vars)
 
         print(f"\n{'='*60}")
         print(f"PING-PONG ({mode}): {bot_name}'s turn")
@@ -1871,18 +1317,9 @@ Add only one new, relevant contribution that directly engages the latest message
 
         conclusions_section = ""
         if self.state.pingpong_conclusions:
-            if mode == "debate":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[MOTIONS CARRIED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            elif mode == "advice":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[RECOMMENDATIONS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            elif mode == "help_me_decide":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[DECISIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            else:
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[FINDINGS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            header = CONCLUSIONS_HEADER.get(mode, CONCLUSIONS_HEADER["research"])
+            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+            conclusions_section = f"\n{header}\n" + "\n".join(conclusion_lines) + "\n"
 
         recent_msgs = self.state.gpt_msgs[-7:] if self.state.gpt_msgs else []
         recent_lines = []
@@ -1899,47 +1336,15 @@ Add only one new, relevant contribution that directly engages the latest message
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
         # Mode-specific review prompts — first person, with milestone context
-        if mode == "debate":
-            review_instruction = (
-                f'This is motion {milestone_num} of {milestone_total}. '
-                f'In under 30 words: based on the last few exchanges, state whether you think you or {other_name} made the stronger case on this point. '
-                f'Start with "I won" or "I concede" then briefly explain why.\n'
-                'Do not prefix with your name. No markdown, no lists.'
-            )
-            system_msg = f"You are {bot_name} judging a debate motion. Be honest and direct. Speak in first person."
-        elif mode == "advice":
-            review_instruction = (
-                f'This is recommendation {milestone_num} of {milestone_total}. '
-                'In under 30 words: propose one concrete, actionable recommendation based on the discussion so far. '
-                'Speak in first person — "I think the key recommendation is..." or "I believe we should suggest..."\n'
-                'Do not prefix with your name. No markdown, no lists.'
-            )
-            system_msg = f"You are {bot_name} proposing a recommendation. Be concise and direct. Speak in first person."
-        elif mode == "help_me_decide":
-            review_instruction = (
-                f'This is decision {milestone_num} of {milestone_total}. '
-                'In under 30 words: based on the discussion so far, propose a clear decision or conclusion on this aspect of the dilemma. '
-                'Speak in first person — "I think the answer here is..." or "I believe we should recommend..."\n'
-                'Do not prefix with your name. No markdown, no lists.'
-            )
-            system_msg = f"You are {bot_name} proposing a decision. Be concise and direct. Speak in first person."
-        else:
-            # research
-            review_instruction = (
-                f'This is finding {milestone_num} of {milestone_total}. '
-                'In under 30 words: propose one concrete finding based on the discussion so far. '
-                'Speak in first person — "I think we\'ve established that..." or "I believe the key finding is..."\n'
-                'Do not prefix with your name. No markdown, no lists.'
-            )
-            system_msg = f"You are {bot_name} proposing a research finding. Be concise and direct. Speak in first person."
+        review_instruction = REVIEW_INSTRUCTION.get(mode, REVIEW_INSTRUCTION["research"]).format(
+            milestone_num=milestone_num, milestone_total=milestone_total, other_name=other_name)
+        system_msg = REVIEW_SYSTEM.get(mode, REVIEW_SYSTEM["research"]).format(bot_name=bot_name)
 
-        mode_verb = {"debate": "debating", "advice": "advising on", "research": "researching", "help_me_decide": "deciding about"}.get(mode, "researching")
-        prompt = f"""You are {bot_name}. You and {other_name} have been {mode_verb} "{topic}".
-{conclusions_section}
-[LAST 7 MESSAGES]
-{recent_text}
-
-{review_instruction}"""
+        mode_verb = REVIEW_MODE_VERB.get(mode, "researching")
+        prompt = REVIEW_PROMPT.format(
+            bot_name=bot_name, other_name=other_name, mode_verb=mode_verb,
+            topic=topic, conclusions_section=conclusions_section,
+            recent_text=recent_text, review_instruction=review_instruction)
 
         print(f"\n{'='*60}")
         print(f"PING-PONG REVIEW ({mode}): {bot_name} proposing")
@@ -1987,49 +1392,17 @@ Add only one new, relevant contribution that directly engages the latest message
 
         conclusions_section = ""
         if self.state.pingpong_conclusions:
-            if mode == "debate":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[MOTIONS CARRIED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            elif mode == "advice":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[RECOMMENDATIONS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            elif mode == "help_me_decide":
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[DECISIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
-            else:
-                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
-                conclusions_section = "\n[FINDINGS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            header = CONCLUSIONS_HEADER.get(mode, CONCLUSIONS_HEADER["research"])
+            conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+            conclusions_section = f"\n{header}\n" + "\n".join(conclusion_lines) + "\n"
 
         # Mode-specific respond prompts — first person
-        if mode == "debate":
-            prompt = f"""You are {bot_name}. {other_name} just assessed motion {milestone_num} of {milestone_total} in your debate about "{topic}":
-"{review_text}"
-{conclusions_section}
-You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person, and suggest what argument to tackle next.
-Do not prefix with your name. No markdown, no lists."""
-            system_msg = f"You are {bot_name} responding to a debate motion assessment. Be direct. Speak in first person."
-        elif mode == "advice":
-            prompt = f"""You are {bot_name}. {other_name} just proposed recommendation {milestone_num} of {milestone_total} about "{topic}":
-"{review_text}"
-{conclusions_section}
-You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person, and suggest what to focus on next.
-Do not prefix with your name. No markdown, no lists."""
-            system_msg = f"You are {bot_name} evaluating a recommendation. Be direct. Speak in first person."
-        elif mode == "help_me_decide":
-            prompt = f"""You are {bot_name}. {other_name} just proposed decision {milestone_num} of {milestone_total} about "{topic}":
-"{review_text}"
-{conclusions_section}
-You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person, and suggest what aspect to consider next.
-Do not prefix with your name. No markdown, no lists."""
-            system_msg = f"You are {bot_name} evaluating a proposed decision. Be direct. Speak in first person."
-        else:
-            # research
-            prompt = f"""You are {bot_name}. {other_name} just proposed finding {milestone_num} of {milestone_total} about "{topic}":
-"{review_text}"
-{conclusions_section}
-You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person, and state what we should investigate next.
-Do not prefix with your name. No markdown, no lists."""
-            system_msg = f"You are {bot_name} evaluating a research finding. Be direct. Speak in first person."
+        prompt = RESPOND_PROMPT.get(mode, RESPOND_PROMPT["research"]).format(
+            bot_name=bot_name, other_name=other_name,
+            milestone_num=milestone_num, milestone_total=milestone_total,
+            topic=topic, review_text=review_text,
+            conclusions_section=conclusions_section)
+        system_msg = RESPOND_SYSTEM.get(mode, RESPOND_SYSTEM["research"]).format(bot_name=bot_name)
 
         print(f"\n{'='*60}")
         print(f"PING-PONG RESPOND ({mode}): {bot_name} responding")
@@ -2087,7 +1460,7 @@ Do not prefix with your name. No markdown, no lists."""
 
                 if num >= target:
                     self.state.pingpong_complete = True
-                    milestone_word = {"debate": "motions", "advice": "recommendations", "help_me_decide": "decisions"}.get(mode, "findings")
+                    milestone_word = MILESTONE_WORD.get(mode, "findings")
                     label = {"debate": "Debate", "advice": "Advice", "help_me_decide": "Decision"}.get(mode, "Research")
                     print(f"🏁 {label} complete — {target} {milestone_word} reached!")
             else:
