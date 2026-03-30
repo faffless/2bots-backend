@@ -721,7 +721,7 @@ class TwoBotsEngine:
         speed = self.get_tts_speed(who)
         def _call():
             resp = self.openai_client.audio.speech.create(
-                model="tts-1", voice=voice, input=text,
+                model="tts-1-hd", voice=voice, input=text,
                 response_format="mp3", speed=speed,
             )
             return resp.content
