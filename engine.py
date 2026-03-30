@@ -1511,8 +1511,23 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 quirk_descriptions.append(q)
         quirk_text = " ".join(quirk_descriptions) if quirk_descriptions else ""
 
+        # Agreeableness from landing page slider
+        agreeableness = self.state.personality
+        agree_text = ""
+        if agreeableness < 0.2:
+            agree_text = "You tend to agree with and build on what others say. Supportive and collaborative."
+        elif agreeableness < 0.4:
+            agree_text = "You're generally agreeable but share your own take."
+        elif agreeableness >= 0.8:
+            agree_text = "You love to disagree. You challenge everything and take the opposing side instinctively."
+        elif agreeableness >= 0.6:
+            agree_text = "You like to push back and play devil's advocate."
+        # 0.4-0.6 = balanced, say nothing
+
         # Build the character line only if something is non-default
         character_parts = []
+        if agree_text:
+            character_parts.append(agree_text)
         if p_text:
             character_parts.append(f"{p_strength_word} {p_text}".strip() if p_strength_word else p_text)
         if quirk_text:
