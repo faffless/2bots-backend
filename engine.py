@@ -1561,7 +1561,7 @@ Make one strong argument that directly responds to the latest message. Attack we
 {recent_text}
 
 [INSTRUCTIONS]
-Do not prefix your response with your name or any label."""
+Keep your response under 30 words. Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in a debate. Respond naturally and concisely."
         elif mode == "advice":
             prompt = f"""[ROLE]
@@ -1574,7 +1574,7 @@ Add one practical, specific insight that builds on or challenges the latest mess
 {recent_text}
 
 [INSTRUCTIONS]
-Do not prefix your response with your name or any label."""
+Keep your response under 30 words. Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in an advice session. Respond naturally and concisely."
         else:
             # research (default)
@@ -1588,7 +1588,7 @@ Add only one new, relevant contribution that directly engages the latest message
 {recent_text}
 
 [INSTRUCTIONS]
-Do not prefix your response with your name or any label."""
+Keep your response under 30 words. Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in a research conversation. Respond naturally and concisely."
 
         print(f"\n{'='*60}")
