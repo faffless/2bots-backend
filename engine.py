@@ -1042,6 +1042,14 @@ class TwoBotsEngine:
                     f'naturally in your first couple of lines.'
                 )
                 print(f"🔄 Topic changed: {self.state.prev_topic} → {topic}")
+            else:
+                # Continuing same format/topic — push for fresh territory
+                context_instruction = (
+                    '\nThis is a CONTINUATION. The audience just heard everything in the conversation history. '
+                    'DO NOT repeat, rephrase, or revisit topics/jokes/points already covered. '
+                    'Move to fresh territory — new angles, deeper layers, surprising tangents, or escalation. '
+                    'The conversation must evolve and feel like it\'s going somewhere new.'
+                )
 
         # Update tracked format/topic for next batch comparison
         self.state.prev_format = mode_key
@@ -1494,7 +1502,11 @@ Return ONLY valid JSON. No markdown. No explanation."""
         """Parse [PLAN: X milestones, Y exchanges] from opener text.
         Sets milestone_target and exchanges_per_milestone on state.
         Returns text with the plan line stripped out."""
-        plan_match = re.search(r'\[PLAN:\s*(\d+)\s*\w+,\s*(\d+)\s*exchanges?\]', text)
+        # Try strict format first: [PLAN: 3 findings, 10 exchanges]
+        plan_match = re.search(r'\[PLAN:\s*(\d+)\s*[\w\s]+?,\s*(\d+)\s*exchanges?\]', text, re.IGNORECASE)
+        if not plan_match:
+            # Fallback: look for any two numbers near "plan" — AI sometimes varies format
+            plan_match = re.search(r'\[PLAN[:\s]*(\d+)\D+?(\d+)', text, re.IGNORECASE)
         if plan_match:
             milestones = max(1, min(5, int(plan_match.group(1))))
             exchanges = max(8, min(12, int(plan_match.group(2))))
@@ -1504,9 +1516,10 @@ Return ONLY valid JSON. No markdown. No explanation."""
             milestone_word = {"debate": "motions", "advice": "recommendations", "help_me_decide": "decisions"}.get(mode, "findings")
             print(f"📋 Opener plan: {milestones} {milestone_word}, {exchanges} exchanges each")
             # Strip the plan line from displayed text
-            text = re.sub(r'\n?\[PLAN:.*?\]', '', text).strip()
+            text = re.sub(r'\n?\[PLAN[^\]]*\]', '', text, flags=re.IGNORECASE).strip()
         else:
-            print("⚠️ No [PLAN:] found in opener — using defaults (3 milestones, 9 exchanges)")
+            print(f"⚠️ No [PLAN:] found in opener — using defaults (3 milestones, 9 exchanges)")
+            print(f"⚠️ Full opener text for debugging: {text[-200:]}")
         return text
 
     def generate_scripted_opener(self, who: str) -> str:
@@ -1685,9 +1698,9 @@ Do not break character. Do not prefix your response with your name or any label.
 You are kicking things off. Greet {other_name}, announce the topic, and either make your opening argument or invite {other_name} to go first. Keep it natural and conversational — like two people starting a lively discussion.{character_line}
 Do not prefix your response with your name or any label. No markdown, no lists, no headers.
 
-Before your response, consider the complexity of this topic. On a SEPARATE line at the very end, write EXACTLY:
+CRITICAL — you MUST end your response with this EXACT line (it will be hidden from the audience):
 [PLAN: X motions, Y exchanges]
-where X is how many motions (key points to resolve) this debate needs (between 1 and 5, based on complexity — simple topics need fewer), and Y is how many back-and-forth exchanges should happen between each motion (between 8 and 12). This line will be stripped and not shown to the audience."""
+Replace X with how many motions this debate needs (1-5, based on complexity). Replace Y with exchanges per motion (8-12). Example: [PLAN: 3 motions, 10 exchanges]"""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
@@ -1707,9 +1720,9 @@ Make one strong argument that directly responds to the latest message. Attack we
 You are kicking things off. Greet {other_name}, introduce the topic, and either share your first piece of advice or ask {other_name} where they think you should start. Keep it natural and conversational.{character_line}
 Do not prefix your response with your name or any label. No markdown, no lists, no headers.
 
-Before your response, consider the complexity of this topic. On a SEPARATE line at the very end, write EXACTLY:
+CRITICAL — you MUST end your response with this EXACT line (it will be hidden from the audience):
 [PLAN: X recommendations, Y exchanges]
-where X is how many recommendations this advice session needs (between 1 and 5, based on complexity — simple topics need fewer), and Y is how many back-and-forth exchanges should happen between each recommendation (between 8 and 12). This line will be stripped and not shown to the audience."""
+Replace X with how many recommendations this session needs (1-5, based on complexity). Replace Y with exchanges per recommendation (8-12). Example: [PLAN: 3 recommendations, 10 exchanges]"""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
@@ -1729,9 +1742,9 @@ Add one practical, specific insight that builds on or challenges the latest mess
 You are kicking things off. Greet {other_name}, frame the dilemma, and share your initial take or ask {other_name} what angle they want to start with. Keep it natural and conversational.{character_line}
 Do not prefix your response with your name or any label. No markdown, no lists, no headers.
 
-Before your response, consider the complexity of this dilemma. On a SEPARATE line at the very end, write EXACTLY:
+CRITICAL — you MUST end your response with this EXACT line (it will be hidden from the audience):
 [PLAN: X decisions, Y exchanges]
-where X is how many key decisions or sub-decisions this dilemma involves (between 1 and 5, based on complexity — simple choices need fewer), and Y is how many back-and-forth exchanges should happen between each decision point (between 8 and 12). This line will be stripped and not shown to the audience."""
+Replace X with how many decisions this dilemma needs (1-5, based on complexity). Replace Y with exchanges per decision (8-12). Example: [PLAN: 2 decisions, 10 exchanges]"""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, helping a listener decide about "{topic}" with {other_name} (another AI) while a human listens.
@@ -1752,9 +1765,9 @@ Add one new angle, trade-off, or consideration that directly responds to the lat
 You are kicking things off. Greet {other_name}, introduce the topic, and either share your opening thoughts or ask {other_name} what angle they want to start with. Keep it natural and conversational.{character_line}
 Do not prefix your response with your name or any label. No markdown, no lists, no headers.
 
-Before your response, consider the complexity of this topic. On a SEPARATE line at the very end, write EXACTLY:
+CRITICAL — you MUST end your response with this EXACT line (it will be hidden from the audience):
 [PLAN: X findings, Y exchanges]
-where X is how many key findings this research needs (between 1 and 5, based on complexity — simple topics need fewer), and Y is how many back-and-forth exchanges should happen between each finding (between 8 and 12). This line will be stripped and not shown to the audience."""
+Replace X with how many findings this research needs (1-5, based on complexity). Replace Y with exchanges per finding (8-12). Example: [PLAN: 3 findings, 10 exchanges]"""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
@@ -1963,7 +1976,7 @@ Add only one new, relevant contribution that directly engages the latest message
             prompt = f"""You are {bot_name}. {other_name} just assessed motion {milestone_num} of {milestone_total} in your debate about "{topic}":
 "{review_text}"
 {conclusions_section}
-You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person.
+You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person, and suggest what argument to tackle next.
 Do not prefix with your name. No markdown, no lists."""
             system_msg = f"You are {bot_name} responding to a debate motion assessment. Be direct. Speak in first person."
         elif mode == "advice":
