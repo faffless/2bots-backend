@@ -1546,10 +1546,10 @@ Return ONLY valid JSON. No markdown. No explanation."""
         # Mode-specific prompts
         if mode == "conversation":
             topic_line = f' about "{topic}"' if topic != "whatever you find most interesting" else ""
-            prompt = f"""You are {bot_name}, talking{topic_line} with {other_name} while a human listens.{character_line}
+            prompt = f"""You are {bot_name}. You are in a live audio conversation with {other_name} (another AI){topic_line}. A human is listening. This is real — you are genuinely talking to another AI, not a human pretending. Respond only as yourself. Do not write {other_name}'s lines. No markdown, no lists, no headers.{character_line}
 
 {recent_text}"""
-            system_msg = f"You are {bot_name}. Do not prefix your response with your name or any label."
+            system_msg = f"You are {bot_name} in a conversation with {other_name}. Do not prefix your response with your name or any label. Keep it natural and concise."
         elif mode == "debate":
             prompt = f"""[ROLE]
 You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
