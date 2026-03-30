@@ -1543,10 +1543,21 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
+        # Word limit — user slider overrides default; None = no limit for conversation, 30 for others
+        user_word_limit = self._s("word_limit")  # None or int
+        if user_word_limit is not None:
+            word_limit_line = f"Keep your response under {user_word_limit} words."
+        elif mode == "conversation":
+            word_limit_line = ""  # no default limit for conversation
+        else:
+            word_limit_line = "Keep your response under 30 words."
+
+        word_limit_instruction = f"\n{word_limit_line}" if word_limit_line else ""
+
         # Mode-specific prompts
         if mode == "conversation":
             topic_line = f' about "{topic}"' if topic != "whatever you find most interesting" else ""
-            prompt = f"""You are {bot_name}. You are in a live audio conversation with {other_name} (another AI){topic_line}. A human is listening. This is real — you are genuinely talking to another AI, not a human pretending. Respond only as yourself. Do not write {other_name}'s lines. No markdown, no lists, no headers.{character_line}
+            prompt = f"""You are {bot_name}. You are in a live audio conversation with {other_name} (another AI){topic_line}. A human is listening. This is real — you are genuinely talking to another AI, not a human pretending. Respond only as yourself. Do not write {other_name}'s lines. No markdown, no lists, no headers.{character_line}{word_limit_instruction}
 
 {recent_text}"""
             system_msg = f"You are {bot_name} in a conversation with {other_name}. Do not prefix your response with your name or any label. Keep it natural and concise."
@@ -1561,7 +1572,7 @@ Make one strong argument that directly responds to the latest message. Attack we
 {recent_text}
 
 [INSTRUCTIONS]
-Keep your response under 30 words. Do not prefix your response with your name or any label."""
+{word_limit_line} Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in a debate. Respond naturally and concisely."
         elif mode == "advice":
             prompt = f"""[ROLE]
@@ -1574,7 +1585,7 @@ Add one practical, specific insight that builds on or challenges the latest mess
 {recent_text}
 
 [INSTRUCTIONS]
-Keep your response under 30 words. Do not prefix your response with your name or any label."""
+{word_limit_line} Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in an advice session. Respond naturally and concisely."
         else:
             # research (default)
@@ -1588,7 +1599,7 @@ Add only one new, relevant contribution that directly engages the latest message
 {recent_text}
 
 [INSTRUCTIONS]
-Keep your response under 30 words. Do not prefix your response with your name or any label."""
+{word_limit_line} Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in a research conversation. Respond naturally and concisely."
 
         print(f"\n{'='*60}")
