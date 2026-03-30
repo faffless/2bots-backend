@@ -1707,6 +1707,12 @@ Add only one new, relevant contribution that directly engages the latest message
                 'Do not prefix with your name. No markdown, no lists.'
             )
             system_msg = f"You are {bot_name} reviewing advice progress. Be concise and direct."
+        elif mode == "conversation":
+            review_instruction = (
+                'In under 30 words: propose one interesting takeaway or shared insight from the last 7 messages.\n'
+                'Do not prefix with your name. No markdown, no lists.'
+            )
+            system_msg = f"You are {bot_name} reflecting on the conversation so far. Be concise and direct."
         else:
             review_instruction = (
                 'In under 30 words: summarise only the last 7 messages and propose a concrete finding you both agree on.\n'
@@ -1714,7 +1720,8 @@ Add only one new, relevant contribution that directly engages the latest message
             )
             system_msg = f"You are {bot_name} reviewing research progress. Be concise and direct."
 
-        prompt = f"""You are {bot_name}. You and the other AI have been {"debating" if mode == "debate" else "advising on" if mode == "advice" else "researching"} "{topic}".
+        mode_verb = {"debate": "debating", "advice": "advising on", "conversation": "discussing", "research": "researching"}.get(mode, "researching")
+        prompt = f"""You are {bot_name}. You and the other AI have been {mode_verb} "{topic}".
 {conclusions_section}
 [LAST 7 MESSAGES]
 {recent_text}
@@ -1769,6 +1776,9 @@ Add only one new, relevant contribution that directly engages the latest message
             elif mode == "advice":
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[ACTION POINTS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            elif mode == "conversation":
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[TAKEAWAYS SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
             else:
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[CONCLUSIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
@@ -1788,6 +1798,13 @@ Do not prefix with your name. No markdown, no lists."""
 You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why, and suggest what to focus on next.
 Do not prefix with your name. No markdown, no lists."""
             system_msg = f"You are {bot_name} evaluating an action point. Be direct."
+        elif mode == "conversation":
+            prompt = f"""You are {bot_name}. {other_name} just proposed this takeaway from your conversation about "{topic}":
+"{review_text}"
+{conclusions_section}
+You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why, and suggest what to talk about next.
+Do not prefix with your name. No markdown, no lists."""
+            system_msg = f"You are {bot_name} reflecting on a conversation takeaway. Be direct."
         else:
             prompt = f"""You are {bot_name}. {other_name} just proposed this finding about "{topic}":
 "{review_text}"
