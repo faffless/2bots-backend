@@ -133,6 +133,8 @@ def save_messages_only(sid: str, engine: TwoBotsEngine) -> None:
         SESSIONS[sid]["pingpong_reviews"] = list(engine.state.pingpong_reviews)
         SESSIONS[sid]["debate_score_gpt"] = engine.state.debate_score_gpt
         SESSIONS[sid]["debate_score_claude"] = engine.state.debate_score_claude
+        SESSIONS[sid]["milestone_target"] = engine.state.milestone_target
+        SESSIONS[sid]["exchanges_per_milestone"] = engine.state.exchanges_per_milestone
     else:
         SESSIONS[sid] = engine.export_state()
 
@@ -576,15 +578,16 @@ async def research_stream(request: Request, req: ResearchRequest):
 
     other = "claude" if who == "gpt" else "gpt"
 
-    # Check if forced review is due
-    # Every 9th message triggers a review cycle (messages 9, 18, 27...)
-    cycle_position = msg_count % 9  # 0 means it's a 9th message
+    # Check if review is due — using AI-chosen exchanges_per_milestone
+    epm = engine.state.exchanges_per_milestone  # 8-12, set by opener AI
+    cycle_position = msg_count % epm  # 0 means milestone reached
     current_mode = engine._s("mode") or "conversation"
     needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.pingpong_complete and current_mode != "conversation")
-    log("research", f"MSG COUNT: {msg_count}, cycle_position: {cycle_position}, needs_review: {needs_review}")
+    milestone_word = {"debate": "motion", "advice": "recommendation"}.get(current_mode, "finding")
+    log("research", f"MSG COUNT: {msg_count}, cycle_position: {cycle_position}/{epm}, needs_review: {needs_review}, target: {engine.state.milestone_target} {milestone_word}s")
 
     # Determine who reviews: alternates each cycle
-    cycle_number = msg_count // 9
+    cycle_number = msg_count // epm
     if cycle_number % 2 == 1:
         reviewer = "gpt"
         responder = "claude"
@@ -605,9 +608,9 @@ async def research_stream(request: Request, req: ResearchRequest):
         if initial_complete:
             text_event["pingpong_complete"] = True
 
-        # Send countdown: messages until next review opportunity (not for conversation mode)
+        # Send countdown: messages until next milestone (not for conversation mode)
         if current_mode != "conversation":
-            msgs_until_review = 9 - (msg_count % 9) if (msg_count % 9) != 0 else 0
+            msgs_until_review = epm - (msg_count % epm) if (msg_count % epm) != 0 else 0
             if msgs_until_review > 0 and not initial_complete:
                 text_event["msgs_until_review"] = msgs_until_review
 
@@ -667,26 +670,24 @@ async def research_stream(request: Request, req: ResearchRequest):
                 "mime_type": "audio/mpeg",
             })
 
-            # Tell frontend whether conclusion/round was reached
+            # Tell frontend whether milestone was reached
             conclusion_num = updated_conclusions
+            milestone_total = engine.state.milestone_target
             if agreed:
+                # Only send the latest conclusion text, not the full list
+                latest_conclusion = engine.state.pingpong_conclusions[-1] if engine.state.pingpong_conclusions else review_text.strip()
                 status_event = {
                     "type": "research_status",
                     "event": "conclusion_reached",
                     "conclusion_num": conclusion_num,
-                    "conclusions": list(engine.state.pingpong_conclusions),
+                    "milestone_total": milestone_total,
+                    "latest_conclusion": latest_conclusion,
                     "mode": mode,
                 }
-                # For debate, also send scores and round winner
+                # For debate, also send scores and winner
                 if mode == "debate":
                     status_event["debate_score_gpt"] = engine.state.debate_score_gpt
                     status_event["debate_score_claude"] = engine.state.debate_score_claude
-                    # Parse winner from review_text
-                    rt_lower = review_text.strip().lower()
-                    if rt_lower.startswith("chatgpt"):
-                        status_event["round_winner"] = "ChatGPT"
-                    elif rt_lower.startswith("claude"):
-                        status_event["round_winner"] = "Claude"
                 yield sse(status_event)
             else:
                 yield sse({"type": "research_status", "event": "conclusion_rejected", "mode": mode})
@@ -707,6 +708,7 @@ async def research_stream(request: Request, req: ResearchRequest):
         done_event = {"type": "done", "next_who": other}
         if engine.state.pingpong_complete:
             done_event["pingpong_complete"] = True
+            done_event["milestone_target"] = engine.state.milestone_target
             if mode == "debate":
                 done_event["debate_score_gpt"] = engine.state.debate_score_gpt
                 done_event["debate_score_claude"] = engine.state.debate_score_claude
