@@ -701,6 +701,8 @@ async def research_stream(request: Request, req: ResearchRequest):
         if engine.state.pingpong_complete:
             done_event["pingpong_complete"] = True
             done_event["milestone_target"] = engine.state.milestone_target
+            done_event["conclusions"] = list(engine.state.pingpong_conclusions)
+            done_event["mode"] = mode
             if mode == "debate":
                 done_event["debate_score_gpt"] = engine.state.debate_score_gpt
                 done_event["debate_score_claude"] = engine.state.debate_score_claude
