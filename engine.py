@@ -1196,6 +1196,18 @@ class TwoBotsEngine:
 
         word_limit_instruction = f"\n{word_limit_line}" if word_limit_line else ""
 
+        # Agreeableness
+        agreeableness = self.state.personality
+        agree_section = ""
+        if agreeableness < 0.2:
+            agree_section = "\n" + AGREEABLENESS_BATCH["very_agreeable"]
+        elif agreeableness < 0.4:
+            agree_section = "\n" + AGREEABLENESS_BATCH["agreeable"]
+        elif agreeableness >= 0.8:
+            agree_section = "\n" + AGREEABLENESS_BATCH["very_disagreeable"]
+        elif agreeableness >= 0.6:
+            agree_section = "\n" + AGREEABLENESS_BATCH["disagreeable"]
+
         # Is this the very first message of the ping-pong session?
         is_opener = self.state.pingpong_msg_count == 0
 
@@ -1205,6 +1217,7 @@ class TwoBotsEngine:
             character_line=character_line, conclusions_section=conclusions_section,
             recent_text=recent_text, word_limit_line=word_limit_line,
             word_limit_instruction=word_limit_instruction,
+            agree_section=agree_section,
         )
 
         if mode == "conversation":
