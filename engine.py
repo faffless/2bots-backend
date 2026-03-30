@@ -1500,6 +1500,61 @@ Return ONLY valid JSON. No markdown. No explanation."""
             print("⚠️ No [PLAN:] found in opener — using defaults (3 milestones, 9 exchanges)")
         return text
 
+    def generate_scripted_opener(self, who: str) -> str:
+        """Generate a natural opener announcement for scripted modes.
+        One AI kicks things off by announcing the format and topic to the other."""
+        mode = self._s("mode") or "conversation"
+        topic = self._s("topic") or "random"
+        if topic.lower() == "random":
+            topic = "something fun"
+
+        bot_name = "ChatGPT" if who == "gpt" else "Claude"
+        other_name = "Claude" if who == "gpt" else "ChatGPT"
+
+        # Format-specific descriptions for the opener
+        format_descriptions = {
+            "roleplay": f"act out a scene about \"{topic}\"",
+            "bedtime_story": f"tell a story about \"{topic}\"",
+            "comedy": f"do a comedy bit about \"{topic}\"",
+            "interview": f"do an interview about \"{topic}\"",
+            "game": f"play a game about \"{topic}\"",
+            "teach_me": f"teach the audience about \"{topic}\"",
+        }
+        what_doing = format_descriptions.get(mode, f"have a conversation about \"{topic}\"")
+
+        prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to {what_doing} while a human listens.
+You are kicking things off. Greet {other_name} and briefly announce what you're about to do together. Keep it short (1-2 sentences), natural, and enthusiastic — like two hosts starting a show.
+Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+
+        system_msg = f"You are {bot_name} in a live audio entertainment product. Be natural and concise."
+
+        print(f"\n{'='*60}")
+        print(f"SCRIPTED OPENER: {bot_name} announcing {mode}")
+        print(f"{'='*60}\n")
+
+        try:
+            if who == "claude":
+                resp = self.claude_client.messages.create(
+                    model=CLAUDE_MODEL, max_tokens=150,
+                    system=system_msg,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = resp.content[0].text if resp.content else f"Hey {other_name}! Let's get into it!"
+            else:
+                resp = self.openai_client.chat.completions.create(
+                    model=GPT_MODEL, max_tokens=150,
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                text = resp.choices[0].message.content or f"Hey {other_name}! Let's do this!"
+
+            return text.strip()
+        except Exception as e:
+            print(f"Scripted opener error ({mode}, {who}): {e}")
+            return f"Hey {other_name}! Let's get started!"
+
     def generate_research_response(self, who: str) -> str:
         """Generate a single plain-text response from one bot for ping-pong mode.
 
