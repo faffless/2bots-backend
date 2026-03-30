@@ -1152,7 +1152,10 @@ Return ONLY valid JSON. No other text."""
             for msg in batch:
                 if isinstance(msg, dict) and "speaker" in msg and "text" in msg:
                     if msg["speaker"] in ("gpt", "claude"):
-                        validated.append({"speaker": msg["speaker"], "text": str(msg["text"])})
+                        text = str(msg["text"])
+                        # Strip speaker prefixes the AI sometimes includes (e.g. "G: ...", "C: ...")
+                        text = re.sub(r'^[GC]:\s*', '', text)
+                        validated.append({"speaker": msg["speaker"], "text": text})
             if len(validated) < 2:
                 raise ValueError("Too few valid messages after validation")
             batch = validated
