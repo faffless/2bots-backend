@@ -358,19 +358,20 @@ async def start_stream(request: Request, req: StartRequest):
 
     save(sid, engine)
 
-    # Hardcoded openers — consistent every time, no API call needed
-    opener_gpt = "Hey! Welcome to 2bots, so glad you're here! Claude, say hi!"
-    opener_claude = "Oh hey! Yeah I'm here, good to be back! So, what are we getting into today?"
+    # Check if this is a ping-pong mode (no openers, jump straight in)
+    current_mode = engine.state.settings.get("mode", "conversation")
+    is_pingpong = current_mode in PINGPONG_MODES
 
-    # Add opener messages to history and save BEFORE streaming.
-    # This ensures the prefetch (fired by frontend on receiving session event)
-    # loads an engine that already has the openers in its history.
-    engine.add_message("gpt", opener_gpt)
-    engine.add_message("claude", opener_claude)
-    save_messages_only(sid, engine)
+    if not is_pingpong:
+        # Hardcoded openers — consistent every time, no API call needed
+        opener_gpt = "Hey! Welcome to 2bots, so glad you're here! Claude, say hi!"
+        opener_claude = "Oh hey! Yeah I'm here, good to be back! So, what are we getting into today?"
 
-    # Pre-generate TTS for both openers so the first autopilot message
-    # can start generating while openers are still playing
+        # Add opener messages to history and save BEFORE streaming.
+        engine.add_message("gpt", opener_gpt)
+        engine.add_message("claude", opener_claude)
+        save_messages_only(sid, engine)
+
     gpt_voice = engine.state.settings.get("gpt_voice", "shimmer")
     claude_voice = engine.state.settings.get("claude_voice", "onyx")
 
@@ -381,23 +382,23 @@ async def start_stream(request: Request, req: StartRequest):
             "claude_personality": engine.state.settings.get("claude_personality", "default"),
         })
 
-        # GPT opener — generate TTS first, then send text + audio together
-        try:
-            gpt_audio = await engine.generate_tts_bytes(opener_gpt, gpt_voice, "gpt")
-            yield sse({"type": "text", "speaker": "gpt", "text": opener_gpt})
-            yield sse({"type": "audio", "speaker": "gpt", "audio_base64": base64.b64encode(gpt_audio).decode(), "mime_type": "audio/mp3"})
-        except Exception as e:
-            log("tts", f"Opener GPT TTS error: {e}")
-            yield sse({"type": "text", "speaker": "gpt", "text": opener_gpt})
+        if not is_pingpong:
+            # Scripted: generate TTS for openers
+            try:
+                gpt_audio = await engine.generate_tts_bytes(opener_gpt, gpt_voice, "gpt")
+                yield sse({"type": "text", "speaker": "gpt", "text": opener_gpt})
+                yield sse({"type": "audio", "speaker": "gpt", "audio_base64": base64.b64encode(gpt_audio).decode(), "mime_type": "audio/mp3"})
+            except Exception as e:
+                log("tts", f"Opener GPT TTS error: {e}")
+                yield sse({"type": "text", "speaker": "gpt", "text": opener_gpt})
 
-        # Claude opener — generate TTS first, then send text + audio together
-        try:
-            claude_audio = await engine.generate_tts_bytes(opener_claude, claude_voice, "claude")
-            yield sse({"type": "text", "speaker": "claude", "text": opener_claude})
-            yield sse({"type": "audio", "speaker": "claude", "audio_base64": base64.b64encode(claude_audio).decode(), "mime_type": "audio/mp3"})
-        except Exception as e:
-            log("tts", f"Opener Claude TTS error: {e}")
-            yield sse({"type": "text", "speaker": "claude", "text": opener_claude})
+            try:
+                claude_audio = await engine.generate_tts_bytes(opener_claude, claude_voice, "claude")
+                yield sse({"type": "text", "speaker": "claude", "text": opener_claude})
+                yield sse({"type": "audio", "speaker": "claude", "audio_base64": base64.b64encode(claude_audio).decode(), "mime_type": "audio/mp3"})
+            except Exception as e:
+                log("tts", f"Opener Claude TTS error: {e}")
+                yield sse({"type": "text", "speaker": "claude", "text": opener_claude})
 
         yield sse({"type": "done"})
 
