@@ -1551,8 +1551,8 @@ Return ONLY valid JSON. No markdown. No explanation."""
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
-        # Word limit — user slider overrides default; None = no limit for conversation, 30 for others
-        user_word_limit = self._s("word_limit")  # None or int
+        # Word limit — per-bot slider overrides default; None = no limit for conversation, 30 for others
+        user_word_limit = self._s(f"{prefix}_word_limit")  # None or int
         if user_word_limit is not None:
             word_limit_line = f"Keep your response under {user_word_limit} words."
         elif mode == "conversation":
