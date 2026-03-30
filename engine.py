@@ -1590,8 +1590,12 @@ Do not prefix your response with your name or any label. No markdown, no lists, 
         """
         mode = self._s("mode") or "conversation"
         topic = self._s("topic") or "random"
-        if topic.lower() == "random":
-            topic = "whatever you find most interesting"
+        topic_is_random = topic.lower() == "random" or topic.strip() == ""
+        if topic_is_random:
+            if mode == "help_me_decide":
+                topic = "a specific, surprising dilemma you pick on the spot"
+            else:
+                topic = "whatever you find most interesting"
 
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
         other_name = "Claude" if who == "gpt" else "ChatGPT"
@@ -1742,7 +1746,11 @@ Add one practical, specific insight that builds on or challenges the latest mess
             system_msg = f"You are {bot_name} in an advice session. Respond naturally and concisely."
         elif mode == "help_me_decide":
             if is_opener:
-                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to help a listener think through a decision or dilemma: "{topic}". A human is listening.
+                if topic_is_random:
+                    topic_instruction = "No topic was given — come up with a completely random, surprising dilemma on the spot."
+                else:
+                    topic_instruction = f'The dilemma is: "{topic}".'
+                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to help the User think through a decision or dilemma. A human is listening. {topic_instruction}
 
 Your first line must be: [PLAN: X decisions, Y exchanges]
 where X is how many key decisions this dilemma needs (1-5) and Y is exchanges per decision (8-12). Example: [PLAN: 2 decisions, 10 exchanges]
@@ -1845,8 +1853,12 @@ Add only one new, relevant contribution that directly engages the latest message
         Triggered at the exchanges_per_milestone interval. Alternates between GPT and Claude."""
         mode = self._s("mode") or "conversation"
         topic = self._s("topic") or "random"
-        if topic.lower() == "random":
-            topic = "whatever you find most interesting"
+        topic_is_random = topic.lower() == "random" or topic.strip() == ""
+        if topic_is_random:
+            if mode == "help_me_decide":
+                topic = "a specific, surprising dilemma you pick on the spot"
+            else:
+                topic = "whatever you find most interesting"
 
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
         other_name = "Claude" if who == "gpt" else "ChatGPT"
@@ -1957,8 +1969,12 @@ Add only one new, relevant contribution that directly engages the latest message
         Returns (text, agreed)."""
         mode = self._s("mode") or "conversation"
         topic = self._s("topic") or "random"
-        if topic.lower() == "random":
-            topic = "whatever you find most interesting"
+        topic_is_random = topic.lower() == "random" or topic.strip() == ""
+        if topic_is_random:
+            if mode == "help_me_decide":
+                topic = "a specific, surprising dilemma you pick on the spot"
+            else:
+                topic = "whatever you find most interesting"
 
         bot_name = "ChatGPT" if who == "gpt" else "Claude"
         other_name = "Claude" if who == "gpt" else "ChatGPT"
