@@ -575,7 +575,7 @@ async def research_stream(request: Request, req: ResearchRequest):
     cycle_position = msg_count % epm  # 0 means milestone reached
     current_mode = engine._s("mode") or "conversation"
     needs_review = (cycle_position == 0 and msg_count > 0 and not engine.state.pingpong_complete and current_mode != "conversation")
-    milestone_word = {"debate": "motion", "advice": "recommendation"}.get(current_mode, "finding")
+    milestone_word = {"debate": "motion", "advice": "recommendation", "help_me_decide": "decision"}.get(current_mode, "finding")
     log("research", f"MSG COUNT: {msg_count}, cycle_position: {cycle_position}/{epm}, needs_review: {needs_review}, target: {engine.state.milestone_target} {milestone_word}s")
 
     # Determine who reviews: alternates each cycle

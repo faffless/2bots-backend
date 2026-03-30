@@ -246,13 +246,21 @@ MODES = {
             "Honest, caring, occasionally blunt."
         ),
     },
+    "help_me_decide": {
+        "label": "Help Me Decide",
+        "prompt": (
+            "Two AIs help the listener think through a dilemma or decision. "
+            "They explore angles, weigh trade-offs, challenge assumptions, "
+            "and help the listener see what they might be missing."
+        ),
+    },
 }
 
 # Keep old name for backward compat with imports
 INTERACTION_STYLES = MODES
 
 # Modes that use ping-pong (genuine back-and-forth) instead of scripted batches
-PINGPONG_MODES = {"research", "debate", "advice", "conversation"}
+PINGPONG_MODES = {"research", "debate", "advice", "conversation", "help_me_decide"}
 
 # ---- Format Roles (maps format → screenwriter role + content type) ----
 FORMAT_ROLES = {
@@ -266,6 +274,7 @@ FORMAT_ROLES = {
     "game":            {"role": "GAME DESIGNER",    "content": "GAME SESSION",    "interaction": "GAME — PLAY THE GAME, TAKE TURNS"},
     "teach_me":        {"role": "TEACHER",          "content": "LESSON",          "interaction": "LESSON — TEACH, EXPLAIN, QUIZ"},
     "advice":          {"role": "ADVISOR",           "content": "ADVICE SESSION", "interaction": "ADVICE SESSION — LISTEN, GUIDE, SUGGEST"},
+    "help_me_decide":  {"role": "DECISION HELPER",   "content": "DECISION SESSION", "interaction": "DECISION — ONE ARGUES FOR, ONE ARGUES AGAINST"},
 }
 
 # ---- Personalities ----
@@ -1492,7 +1501,7 @@ Return ONLY valid JSON. No markdown. No explanation."""
             self.state.milestone_target = milestones
             self.state.exchanges_per_milestone = exchanges
             mode = self._s("mode") or "research"
-            milestone_word = {"debate": "motions", "advice": "recommendations"}.get(mode, "findings")
+            milestone_word = {"debate": "motions", "advice": "recommendations", "help_me_decide": "decisions"}.get(mode, "findings")
             print(f"📋 Opener plan: {milestones} {milestone_word}, {exchanges} exchanges each")
             # Strip the plan line from displayed text
             text = re.sub(r'\n?\[PLAN:.*?\]', '', text).strip()
@@ -1623,6 +1632,9 @@ Do not prefix your response with your name or any label. No markdown, no lists, 
             elif mode == "advice":
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[RECOMMENDATIONS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            elif mode == "help_me_decide":
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[DECISIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
             else:
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[FINDINGS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
@@ -1711,6 +1723,28 @@ Add one practical, specific insight that builds on or challenges the latest mess
 [INSTRUCTIONS]
 {word_limit_line} Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in an advice session. Respond naturally and concisely."
+        elif mode == "help_me_decide":
+            if is_opener:
+                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to help a listener think through a decision or dilemma: "{topic}". A human is listening.
+You are kicking things off. Greet {other_name}, frame the dilemma, and share your initial take or ask {other_name} what angle they want to start with. Keep it natural and conversational.{character_line}
+Do not prefix your response with your name or any label. No markdown, no lists, no headers.
+
+Before your response, consider the complexity of this dilemma. On a SEPARATE line at the very end, write EXACTLY:
+[PLAN: X decisions, Y exchanges]
+where X is how many key decisions or sub-decisions this dilemma involves (between 1 and 5, based on complexity — simple choices need fewer), and Y is how many back-and-forth exchanges should happen between each decision point (between 8 and 12). This line will be stripped and not shown to the audience."""
+            else:
+                prompt = f"""[ROLE]
+You are {bot_name}, helping a listener decide about "{topic}" with {other_name} (another AI) while a human listens.
+You are both aware you are AIs helping someone think through a real decision or dilemma.
+Add one new angle, trade-off, or consideration that directly responds to the latest message. Challenge assumptions, explore consequences, or highlight what's being overlooked. Be practical and specific.{character_line}
+{conclusions_section}
+
+[RECENT CONVERSATION]
+{recent_text}
+
+[INSTRUCTIONS]
+{word_limit_line} Do not prefix your response with your name or any label."""
+            system_msg = f"You are {bot_name} helping someone make a decision. Respond naturally and concisely."
         else:
             # research (default)
             if is_opener:
@@ -1805,6 +1839,9 @@ Add only one new, relevant contribution that directly engages the latest message
             elif mode == "advice":
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[RECOMMENDATIONS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            elif mode == "help_me_decide":
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[DECISIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
             else:
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[FINDINGS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
@@ -1840,6 +1877,14 @@ Add only one new, relevant contribution that directly engages the latest message
                 'Do not prefix with your name. No markdown, no lists.'
             )
             system_msg = f"You are {bot_name} proposing a recommendation. Be concise and direct. Speak in first person."
+        elif mode == "help_me_decide":
+            review_instruction = (
+                f'This is decision {milestone_num} of {milestone_total}. '
+                'In under 30 words: based on the discussion so far, propose a clear decision or conclusion on this aspect of the dilemma. '
+                'Speak in first person — "I think the answer here is..." or "I believe we should recommend..."\n'
+                'Do not prefix with your name. No markdown, no lists.'
+            )
+            system_msg = f"You are {bot_name} proposing a decision. Be concise and direct. Speak in first person."
         else:
             # research
             review_instruction = (
@@ -1850,7 +1895,7 @@ Add only one new, relevant contribution that directly engages the latest message
             )
             system_msg = f"You are {bot_name} proposing a research finding. Be concise and direct. Speak in first person."
 
-        mode_verb = {"debate": "debating", "advice": "advising on", "research": "researching"}.get(mode, "researching")
+        mode_verb = {"debate": "debating", "advice": "advising on", "research": "researching", "help_me_decide": "deciding about"}.get(mode, "researching")
         prompt = f"""You are {bot_name}. You and {other_name} have been {mode_verb} "{topic}".
 {conclusions_section}
 [LAST 7 MESSAGES]
@@ -1906,6 +1951,9 @@ Add only one new, relevant contribution that directly engages the latest message
             elif mode == "advice":
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[RECOMMENDATIONS AGREED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
+            elif mode == "help_me_decide":
+                conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
+                conclusions_section = "\n[DECISIONS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
             else:
                 conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
                 conclusions_section = "\n[FINDINGS REACHED SO FAR]\n" + "\n".join(conclusion_lines) + "\n"
@@ -1925,6 +1973,13 @@ Do not prefix with your name. No markdown, no lists."""
 You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person, and suggest what to focus on next.
 Do not prefix with your name. No markdown, no lists."""
             system_msg = f"You are {bot_name} evaluating a recommendation. Be direct. Speak in first person."
+        elif mode == "help_me_decide":
+            prompt = f"""You are {bot_name}. {other_name} just proposed decision {milestone_num} of {milestone_total} about "{topic}":
+"{review_text}"
+{conclusions_section}
+You MUST start your response with either "Agree" or "Disagree" (exactly, capitalised). Then in under 30 words: explain why in first person, and suggest what aspect to consider next.
+Do not prefix with your name. No markdown, no lists."""
+            system_msg = f"You are {bot_name} evaluating a proposed decision. Be direct. Speak in first person."
         else:
             # research
             prompt = f"""You are {bot_name}. {other_name} just proposed finding {milestone_num} of {milestone_total} about "{topic}":
@@ -1985,13 +2040,13 @@ Do not prefix with your name. No markdown, no lists."""
                     else:
                         print(f"📋 Motion #{num}/{target} (winner unclear): {review_text.strip()}")
                 else:
-                    label = "Recommendation" if mode == "advice" else "Finding"
+                    label = {"advice": "Recommendation", "help_me_decide": "Decision"}.get(mode, "Finding")
                     print(f"📋 {label} #{num}/{target}: {review_text.strip()}")
 
                 if num >= target:
                     self.state.pingpong_complete = True
-                    milestone_word = {"debate": "motions", "advice": "recommendations"}.get(mode, "findings")
-                    label = {"debate": "Debate", "advice": "Advice"}.get(mode, "Research")
+                    milestone_word = {"debate": "motions", "advice": "recommendations", "help_me_decide": "decisions"}.get(mode, "findings")
+                    label = {"debate": "Debate", "advice": "Advice", "help_me_decide": "Decision"}.get(mode, "Research")
                     print(f"🏁 {label} complete — {target} {milestone_word} reached!")
             else:
                 print(f"❌ Rejected: {review_text.strip()[:60]}...")
