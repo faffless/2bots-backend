@@ -14,6 +14,10 @@ from typing import Any, Dict, List, Optional
 
 import anthropic
 import openai
+# Pre-import OpenAI submodules to prevent deadlock when parallel threads
+# trigger lazy imports simultaneously (Python import lock issue)
+import openai.resources.audio
+import openai.resources.chat
 
 import tuning
 
@@ -1788,8 +1792,14 @@ Add only one new, relevant contribution that directly engages the latest message
         print(prompt)
         print(f"{'='*60}\n")
 
-        # No max_tokens cap for conversation mode without a word limit — let the model finish naturally
-        use_max_tokens = None if (mode == "conversation" and user_word_limit is None) else 200
+        # Openers need more tokens (greeting + [PLAN:] line)
+        # Non-conversation, non-opener responses stay at 200
+        if is_opener and mode != "conversation":
+            use_max_tokens = 400
+        elif mode == "conversation" and user_word_limit is None:
+            use_max_tokens = None  # let the model finish naturally
+        else:
+            use_max_tokens = 200
 
         try:
             if who == "claude":
