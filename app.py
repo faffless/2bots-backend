@@ -432,14 +432,16 @@ async def start_stream(request: Request, req: StartRequest):
                 "mime_type": "audio/mpeg",
             })
 
-            # Prefetch next response in background
+            # Prefetch next response + TTS in background
             next_who = opener_who  # alternates back
             async def _prefetch():
                 try:
                     pf_engine = get_engine(sid)
                     pf_text = await asyncio.to_thread(pf_engine.generate_research_response, next_who)
-                    RESEARCH_PREFETCH[sid] = {"who": next_who, "text": pf_text}
-                    log("research", f"Prefetched {next_who}'s response for {sid[:8]}...")
+                    pf_voice = pf_engine.get_gpt_voice() if next_who == "gpt" else pf_engine.get_claude_voice()
+                    pf_audio = await pf_engine.generate_tts_bytes(pf_text, pf_voice, next_who)
+                    RESEARCH_PREFETCH[sid] = {"who": next_who, "text": pf_text, "audio": pf_audio}
+                    log("research", f"Prefetched {next_who}'s response + TTS for {sid[:8]}...")
                 except Exception as e:
                     log("research", f"Start prefetch failed: {e}")
             asyncio.create_task(_prefetch())
@@ -648,8 +650,8 @@ async def filler_stream(request: Request, req: FillerRequest):
 
 
 # ---- PING-PONG MODE ----
-# Prefetch cache for research mode: stores the next bot's pre-generated response
-# Key: session_id, Value: {"who": str, "text": str, "task": asyncio.Task | None}
+# Prefetch cache for research mode: stores the next bot's pre-generated response + TTS
+# Key: session_id, Value: {"who": str, "text": str, "audio": bytes}
 RESEARCH_PREFETCH: Dict[str, Dict[str, Any]] = {}
 
 
@@ -664,11 +666,13 @@ async def research_stream(request: Request, req: ResearchRequest):
     who = req.who
     log("research", f"Ping-pong turn: {who} for {sid[:8]}...")
 
-    # Check research prefetch cache first
+    # Check research prefetch cache first (includes pre-generated TTS)
     cached = RESEARCH_PREFETCH.pop(sid, None)
+    prefetched_audio = None
     if cached and cached["who"] == who and "text" in cached:
-        log("research", f"Using PREFETCHED response for {who} in {sid[:8]}...")
+        log("research", f"Using PREFETCHED response + TTS for {who} in {sid[:8]}...")
         text = cached["text"]
+        prefetched_audio = cached.get("audio")  # may be None if TTS wasn't ready yet
         engine = get_engine(sid)
     else:
         if cached:
@@ -710,11 +714,15 @@ async def research_stream(request: Request, req: ResearchRequest):
     async def generate():
         voice = engine.get_gpt_voice() if who == "gpt" else engine.get_claude_voice()
 
-        # Generate TTS BEFORE streaming text (eliminates text-to-audio gap)
-        t0 = time.time()
-        audio = await engine.generate_tts_bytes(text, voice, who)
-        t1 = time.time()
-        log(who, f"Ping-pong TTS in {t1-t0:.1f}s")
+        # Use prefetched TTS if available, otherwise generate now
+        if prefetched_audio:
+            audio = prefetched_audio
+            log(who, "Using PREFETCHED TTS — zero wait")
+        else:
+            t0 = time.time()
+            audio = await engine.generate_tts_bytes(text, voice, who)
+            t1 = time.time()
+            log(who, f"Ping-pong TTS in {t1-t0:.1f}s")
 
         # Send text event with conclusion info
         text_event = {"type": "text", "speaker": who, "text": text}
@@ -802,14 +810,17 @@ async def research_stream(request: Request, req: ResearchRequest):
             else:
                 yield sse({"type": "research_status", "event": "conclusion_rejected", "mode": mode})
 
-        # Start prefetch for the OTHER bot (skip if complete)
+        # Start prefetch for the OTHER bot: text + TTS (skip if complete)
         if not engine.state.pingpong_complete:
             async def _prefetch_other():
                 try:
                     pf_engine = get_engine(sid)
                     pf_text = await asyncio.to_thread(pf_engine.generate_research_response, other)
-                    RESEARCH_PREFETCH[sid] = {"who": other, "text": pf_text}
-                    log("research", f"Prefetched {other}'s response for {sid[:8]}...")
+                    # Also prefetch TTS so next turn is instant
+                    pf_voice = pf_engine.get_gpt_voice() if other == "gpt" else pf_engine.get_claude_voice()
+                    pf_audio = await pf_engine.generate_tts_bytes(pf_text, pf_voice, other)
+                    RESEARCH_PREFETCH[sid] = {"who": other, "text": pf_text, "audio": pf_audio}
+                    log("research", f"Prefetched {other}'s response + TTS for {sid[:8]}...")
                 except Exception as e:
                     log("research", f"Prefetch failed: {e}")
             asyncio.create_task(_prefetch_other())
