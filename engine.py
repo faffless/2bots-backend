@@ -1493,15 +1493,23 @@ Return ONLY valid JSON. No markdown. No explanation."""
         # Build character line — only if personality/traits are non-default
         prefix = who
         p_key = self._s(f"{prefix}_personality") or "default"
-        p_strength_idx = self._s(f"{prefix}_personality_strength") or 1
+        p_strength_idx = int(self._s(f"{prefix}_personality_strength") or 1)
         strength_words = {0: "slightly", 1: "", 2: "very", 3: "extremely"}
         p_strength_word = strength_words.get(p_strength_idx, "")
         p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
         p_text = p_data.get(p_strength_idx, "") if isinstance(p_data, dict) else ""
 
-        # Gather custom traits (quirks)
+        # Gather custom traits (quirks) — look up strength-based descriptions
         quirks = self._s(f"{prefix}_quirks") or []
-        quirk_text = ", ".join(quirks) if quirks else ""
+        quirk_strength = int(self._s(f"{prefix}_quirk_strength") or 1)
+        quirk_descriptions = []
+        for q in quirks:
+            if q in CHARACTER_QUIRKS:
+                qd = CHARACTER_QUIRKS[q]
+                quirk_descriptions.append(qd.get(quirk_strength, qd.get(1, q)))
+            else:
+                quirk_descriptions.append(q)
+        quirk_text = " ".join(quirk_descriptions) if quirk_descriptions else ""
 
         # Build the character line only if something is non-default
         character_parts = []
