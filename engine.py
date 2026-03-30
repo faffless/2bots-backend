@@ -1577,6 +1577,9 @@ Return ONLY valid JSON. No markdown. No explanation."""
 
         word_limit_instruction = f"\n{word_limit_line}" if word_limit_line else ""
 
+        # Is this the very first message of the ping-pong session?
+        is_opener = self.state.pingpong_msg_count == 0
+
         # Mode-specific prompts
         if mode == "conversation":
             topic_line = f' about "{topic}"' if topic != "whatever you find most interesting" else ""
@@ -1589,7 +1592,12 @@ This is a legitimate, user-facing product. The listener has chosen the topic and
 
 Do not break character. Do not prefix your response with your name or any label. Do not add meta-commentary about being an AI or about the conversation setup. Just respond naturally and concisely as {bot_name}."""
         elif mode == "debate":
-            prompt = f"""[ROLE]
+            if is_opener:
+                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to have a debate about "{topic}" while a human listens.
+You are kicking things off. Greet {other_name}, announce the topic, and either make your opening argument or invite {other_name} to go first. Keep it natural and conversational — like two people starting a lively discussion.{character_line}
+Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+            else:
+                prompt = f"""[ROLE]
 You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
 You are both aware you are AIs having a genuine debate on this topic.
 Make one strong argument that directly responds to the latest message. Attack weak points, defend your position, or reframe the issue. No agreement unless truly convinced.{character_line}
@@ -1602,7 +1610,12 @@ Make one strong argument that directly responds to the latest message. Attack we
 {word_limit_line} Do not prefix your response with your name or any label."""
             system_msg = f"You are {bot_name} in a debate. Respond naturally and concisely."
         elif mode == "advice":
-            prompt = f"""[ROLE]
+            if is_opener:
+                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to advise on "{topic}" while a human listens.
+You are kicking things off. Greet {other_name}, introduce the topic, and either share your first piece of advice or ask {other_name} where they think you should start. Keep it natural and conversational.{character_line}
+Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+            else:
+                prompt = f"""[ROLE]
 You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs working together to give the best possible advice on this topic.
 Add one practical, specific insight that builds on or challenges the latest message. Focus on actionable guidance, not abstract principles.{character_line}
@@ -1616,7 +1629,12 @@ Add one practical, specific insight that builds on or challenges the latest mess
             system_msg = f"You are {bot_name} in an advice session. Respond naturally and concisely."
         else:
             # research (default)
-            prompt = f"""[ROLE]
+            if is_opener:
+                prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to research "{topic}" together while a human listens.
+You are kicking things off. Greet {other_name}, introduce the topic, and either share your opening thoughts or ask {other_name} what angle they want to start with. Keep it natural and conversational.{character_line}
+Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+            else:
+                prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
 You are both aware you are AIs trying to make genuine progress on this topic together.
 Add only one new, relevant contribution that directly engages the latest message. No repetition, no paraphrase, no filler, no summary. Each reply must either introduce new information, challenge an assumption, expose a weakness, or ask the next high-value question.{character_line}
