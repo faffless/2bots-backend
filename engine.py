@@ -1187,12 +1187,10 @@ class TwoBotsEngine:
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
-        # Word limit — per-bot slider overrides default; None = no limit for conversation, 30 for others
+        # Word limit — per-bot slider overrides default; otherwise 30 words
         user_word_limit = self._s(f"{prefix}_word_limit")  # None or int
         if user_word_limit is not None:
             word_limit_line = f"Keep your response under {user_word_limit} words."
-        elif mode == "conversation":
-            word_limit_line = ""  # no default limit for conversation
         else:
             word_limit_line = "Keep your response under 30 words."
 
@@ -1253,8 +1251,6 @@ class TwoBotsEngine:
         # Non-conversation, non-opener responses stay at 200
         if is_opener and mode != "conversation":
             use_max_tokens = 250
-        elif mode == "conversation" and user_word_limit is None:
-            use_max_tokens = None  # let the model finish naturally
         else:
             use_max_tokens = 200
 
