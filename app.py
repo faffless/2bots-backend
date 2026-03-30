@@ -345,17 +345,6 @@ async def start_stream(request: Request, req: StartRequest):
     log("session", f"NEW session {sid[:8]}...")
     engine = TwoBotsEngine(personality=req.personality, settings=req.settings or {})
 
-    # 15% chance each bot gets a random personality instead of default
-    non_default = [k for k in PERSONALITIES if k != "default"]
-    if _rand.random() < tuning.RANDOM_PERSONALITY_CHANCE and non_default:
-        rand_p = _rand.choice(non_default)
-        engine.state.settings["gpt_personality"] = rand_p
-        log("session", f"Random GPT personality: {rand_p}")
-    if _rand.random() < tuning.RANDOM_PERSONALITY_CHANCE and non_default:
-        rand_p = _rand.choice(non_default)
-        engine.state.settings["claude_personality"] = rand_p
-        log("session", f"Random Claude personality: {rand_p}")
-
     save(sid, engine)
 
     current_mode = engine.state.settings.get("mode", "conversation")
