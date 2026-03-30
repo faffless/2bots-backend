@@ -455,6 +455,30 @@ AGREEABLENESS_BATCH = {
     "very_disagreeable": "Both bots are extremely disagreeable. They challenge everything and take opposing sides instinctively.",
 }
 
+# =============================================================================
+#  WORD LIMIT RANDOMIZER — Varies response length for natural rhythm
+# =============================================================================
+#
+#  Each ping-pong response rolls a random number and picks a tier.
+#  The "fraction" multiplies the user's word limit slider value.
+#  Example: slider at 30 → short = 30 * 0.2 = 6 words, medium = 30 * 0.5 = 15
+#
+#  Tiers are checked in order. First one where the roll is under
+#  the cumulative probability wins.
+#
+#  To change the balance: adjust "chance" values (must sum to 1.0)
+#  To change tier sizes: adjust "fraction" values
+#  To change the prompt wording per tier: edit "prompt"
+
+WORD_LIMIT_TIERS = [
+    {"label": "short",  "chance": 0.25, "fraction": 0.2, "min": 5,  "prompt": "Keep your response under {limit} words. Be punchy."},
+    {"label": "medium", "chance": 0.25, "fraction": 0.5, "min": 12, "prompt": "Keep your response under {limit} words."},
+    {"label": "full",   "chance": 0.50, "fraction": 1.0, "min": 20, "prompt": "Keep your response under {limit} words."},
+]
+
+WORD_LIMIT_DEFAULT = 30  # Used when the user hasn't set the slider
+
+
 # Used in legacy system prompt (_build_system_prompt)
 AGREEABLENESS_LEGACY = {
     "very_agreeable":  "You tend to agree with and build on what others say. Supportive and collaborative.",

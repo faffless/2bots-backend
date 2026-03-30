@@ -44,6 +44,7 @@ from prompts import (
     LEGACY_TURN_GOAL_AUTO, LEGACY_TURN_GOAL_USER_SPOKE,
     LEGACY_QUIRK_REMINDER, LEGACY_CUSTOM_STRENGTH,
     CONCLUSIONS_HEADER, MILESTONE_WORD,
+    WORD_LIMIT_TIERS, WORD_LIMIT_DEFAULT,
 )
 
 
@@ -1187,12 +1188,19 @@ class TwoBotsEngine:
                 recent_lines.append(f"ChatGPT: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
-        # Word limit — per-bot slider overrides default; otherwise 30 words
+        # Word limit — randomized per response for natural rhythm
         user_word_limit = self._s(f"{prefix}_word_limit")  # None or int
-        if user_word_limit is not None:
-            word_limit_line = f"Keep your response under {user_word_limit} words."
-        else:
-            word_limit_line = "Keep your response under 30 words."
+        base_limit = user_word_limit if user_word_limit is not None else WORD_LIMIT_DEFAULT
+        roll = random.random()
+        cumulative = 0.0
+        chosen_tier = WORD_LIMIT_TIERS[-1]  # fallback to last tier
+        for tier in WORD_LIMIT_TIERS:
+            cumulative += tier["chance"]
+            if roll < cumulative:
+                chosen_tier = tier
+                break
+        randomized_limit = max(chosen_tier["min"], int(base_limit * chosen_tier["fraction"]))
+        word_limit_line = chosen_tier["prompt"].format(limit=randomized_limit)
 
         word_limit_instruction = f"\n{word_limit_line}" if word_limit_line else ""
 
