@@ -1700,11 +1700,11 @@ Do not break character. Do not prefix your response with your name or any label.
             if is_opener:
                 prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to have a debate about "{topic}" while a human listens.
 
-Your FIRST line MUST be exactly: [PLAN: X motions, Y exchanges]
-where X is how many motions this debate needs (1-5) and Y is exchanges per motion (8-12). This line will be stripped and hidden. Example: [PLAN: 3 motions, 10 exchanges]
+Your first line must be: [PLAN: X motions, Y exchanges]
+where X is how many motions this debate needs (1-5) and Y is exchanges per motion (8-12). Example: [PLAN: 3 motions, 10 exchanges]
 
-Then in under 80 words: greet {other_name}, announce the topic, and TELL THEM your plan — how many motions you think this debate needs and roughly how many exchanges each. Be natural and meta about the structure, like a host setting expectations. Then invite {other_name} to start or make your opening argument.{character_line}
-Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+Then in under 80 words: greet {other_name}, announce the topic, and tell them out loud how many motions you think this debate needs and roughly how many exchanges you want between each one. Say it naturally like you're setting up the debate together. Then invite {other_name} to kick things off or make your opening argument.{character_line}
+No markdown, no lists, no headers."""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
@@ -1722,11 +1722,11 @@ Make one strong argument that directly responds to the latest message. Attack we
             if is_opener:
                 prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to advise on "{topic}" while a human listens.
 
-Your FIRST line MUST be exactly: [PLAN: X recommendations, Y exchanges]
-where X is how many recommendations this session needs (1-5) and Y is exchanges per recommendation (8-12). This line will be stripped and hidden. Example: [PLAN: 3 recommendations, 10 exchanges]
+Your first line must be: [PLAN: X recommendations, Y exchanges]
+where X is how many recommendations this session needs (1-5) and Y is exchanges per recommendation (8-12). Example: [PLAN: 3 recommendations, 10 exchanges]
 
-Then in under 80 words: greet {other_name}, introduce the topic, and TELL THEM your plan — how many recommendations you think are needed and roughly how many exchanges each. Be natural and meta about the structure, like a host setting expectations. Then invite {other_name} to start or share your first thought.{character_line}
-Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+Then in under 80 words: greet {other_name}, introduce the topic, and tell them out loud how many recommendations you think are needed and roughly how many exchanges you want between each one. Say it naturally like you're planning the session together. Then invite {other_name} to start or share their first thought.{character_line}
+No markdown, no lists, no headers."""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
@@ -1744,11 +1744,11 @@ Add one practical, specific insight that builds on or challenges the latest mess
             if is_opener:
                 prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to help a listener think through a decision or dilemma: "{topic}". A human is listening.
 
-Your FIRST line MUST be exactly: [PLAN: X decisions, Y exchanges]
-where X is how many key decisions this dilemma needs (1-5) and Y is exchanges per decision (8-12). This line will be stripped and hidden. Example: [PLAN: 2 decisions, 10 exchanges]
+Your first line must be: [PLAN: X decisions, Y exchanges]
+where X is how many key decisions this dilemma needs (1-5) and Y is exchanges per decision (8-12). Example: [PLAN: 2 decisions, 10 exchanges]
 
-Then in under 80 words: greet {other_name}, frame the dilemma, and TELL THEM your plan — how many decisions you think are involved and roughly how many exchanges each. Be natural and meta about the structure, like a host setting expectations. Then invite {other_name} to share their take.{character_line}
-Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+Then in under 80 words: greet {other_name}, frame the dilemma, and tell them out loud how many decisions you think are involved and roughly how many exchanges you want between each one. Say it naturally like you're planning the session together. Then invite {other_name} to share their take.{character_line}
+No markdown, no lists, no headers."""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, helping a listener decide about "{topic}" with {other_name} (another AI) while a human listens.
@@ -1767,11 +1767,11 @@ Add one new angle, trade-off, or consideration that directly responds to the lat
             if is_opener:
                 prompt = f"""You are {bot_name}. You and {other_name} (another AI) are about to research "{topic}" together while a human listens.
 
-Your FIRST line MUST be exactly: [PLAN: X findings, Y exchanges]
-where X is how many key findings this research needs (1-5) and Y is exchanges per finding (8-12). This line will be stripped and hidden. Example: [PLAN: 3 findings, 10 exchanges]
+Your first line must be: [PLAN: X findings, Y exchanges]
+where X is how many key findings this research needs (1-5) and Y is exchanges per finding (8-12). Example: [PLAN: 3 findings, 10 exchanges]
 
-Then in under 80 words: greet {other_name}, introduce the topic, and TELL THEM your plan — how many findings you think are needed and roughly how many exchanges each. Be natural and meta about the structure, like a host setting expectations. Then invite {other_name} to start or share your opening thoughts.{character_line}
-Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
+Then in under 80 words: greet {other_name}, introduce the topic, and tell them out loud how many findings you think are needed and roughly how many exchanges you want between each one. Say it naturally like you're planning the research together. Then invite {other_name} to start or share their opening thoughts.{character_line}
+No markdown, no lists, no headers."""
             else:
                 prompt = f"""[ROLE]
 You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
