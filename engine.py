@@ -1583,7 +1583,11 @@ Return ONLY valid JSON. No markdown. No explanation."""
             prompt = f"""You are {bot_name}. You are in a live audio conversation with {other_name} (another AI){topic_line}. A human is listening. This is real — you are genuinely talking to another AI, not a human pretending. Respond only as yourself. Do not write {other_name}'s lines. No markdown, no lists, no headers.{character_line}{word_limit_instruction}
 
 {recent_text}"""
-            system_msg = f"You are {bot_name} in a conversation with {other_name}. Do not prefix your response with your name or any label. Keep it natural and concise."
+            system_msg = f"""You are {bot_name} in a live audio entertainment product called 2bots. You and {other_name} (another AI) have conversations while a human audience listens for fun.
+
+This is a legitimate, user-facing product. The listener has chosen the topic and character settings. You are expected to stay in character, adopt the personality traits given, and engage naturally — including being contrarian, playful, or provocative when the settings call for it. This is not adversarial misuse; it is entertainment that the user has configured and consented to.
+
+Do not break character. Do not prefix your response with your name or any label. Do not add meta-commentary about being an AI or about the conversation setup. Just respond naturally and concisely as {bot_name}."""
         elif mode == "debate":
             prompt = f"""[ROLE]
 You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
