@@ -124,8 +124,10 @@ def get_engine(sid: str) -> TwoBotsEngine:
         raise HTTPException(status_code=404, detail="Session not found")
     SESSION_LAST_ACTIVE[sid] = time.time()
     engine = TwoBotsEngine.from_state(data)
-    # Inject cached TTS character descriptions so generate_tts_bytes can use them
-    engine._tts_char_cache = TTS_CHARACTER_CACHE.get(sid, {})
+    # Ensure the TTS char cache dict exists so the engine holds a live reference
+    if sid not in TTS_CHARACTER_CACHE:
+        TTS_CHARACTER_CACHE[sid] = {}
+    engine._tts_char_cache = TTS_CHARACTER_CACHE[sid]
     return engine
 
 

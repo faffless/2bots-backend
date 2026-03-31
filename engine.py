@@ -413,8 +413,11 @@ Return ONLY the six fields, nothing else."""
 
     async def generate_tts_bytes(self, text: str, voice: str, who: str = "gpt") -> bytes:
         speed = self.get_tts_speed(who)
+        # _tts_char_cache is a live reference to TTS_CHARACTER_CACHE[sid] dict, set by app.py
         cached_tts_char = getattr(self, '_tts_char_cache', {}).get(who, "")
         instruction = self._build_tts_instruction(who, cached_tts_char)
+        if cached_tts_char:
+            print(f"🎭 TTS using Claude-generated voice for {who}")
         def _call():
             resp = self.openai_client.audio.speech.create(
                 model=TTS_MODEL, voice=voice, input=text,
