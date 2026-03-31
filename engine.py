@@ -402,10 +402,10 @@ Return ONLY the six fields, nothing else."""
         return result.strip()
 
     def _build_tts_instruction(self, who: str) -> str:
-        """Build a SHORT voice instruction from raw character description."""
+        """Build voice instruction. Character description replaces base instruction if present."""
         char_desc = self.get_character_description(who)
         if char_desc:
-            return f"Voice: {char_desc}. {TTS_BASE_INSTRUCTION}"
+            return f"Voice: {char_desc}."
         return TTS_BASE_INSTRUCTION
 
     async def generate_tts_bytes(self, text: str, voice: str, who: str = "gpt") -> bytes:
