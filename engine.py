@@ -401,58 +401,25 @@ Return ONLY the six fields, nothing else."""
         print(f"\n🎭 TTS CHARACTER DESCRIPTION:\nInput: {character_desc}\nOutput: {result}\n")
         return result.strip()
 
-    def _build_tts_instruction(self, who: str, cached_tts_char: str = "") -> str:
-        """Build a voice instruction. Uses Claude-generated description if cached, else falls back."""
-        # If we have a Claude-generated TTS character description, use it
-        if cached_tts_char:
-            return f"{cached_tts_char}\n{TTS_BASE_INSTRUCTION}"
-
-        # Fallback: build from raw character parts
+    def _build_tts_instruction(self, who: str) -> str:
+        """Build a SHORT voice instruction from raw character description."""
         char_desc = self.get_character_description(who)
         if char_desc:
-            return f"{TTS_BASE_INSTRUCTION} Your character: {char_desc}."
+            return f"Voice: {char_desc}. {TTS_BASE_INSTRUCTION}"
         return TTS_BASE_INSTRUCTION
 
     async def generate_tts_bytes(self, text: str, voice: str, who: str = "gpt") -> bytes:
         speed = self.get_tts_speed(who)
-        # _tts_char_cache is a live reference to TTS_CHARACTER_CACHE[sid] dict, set by app.py
-        raw_cache = getattr(self, '_tts_char_cache', {})
-        cached_tts_char = raw_cache.get(who, "")
-        instruction = self._build_tts_instruction(who, cached_tts_char)
-        if cached_tts_char:
-            print(f"🔊 TTS for {who}: ✅ CHARACTER VOICE ACTIVE ({len(cached_tts_char)} chars) | Full instruction: {len(instruction)} chars")
-            print(f"   Character: {cached_tts_char[:200]}")
-        else:
-            print(f"🔊 TTS for {who}: ❌ BASE VOICE ONLY (no character cached)")
-        tts_input = text
-        char_desc = self.get_character_description(who)
-        if char_desc:
-            tts_input = f"[Voice: {char_desc}] {text}"
-            print(f"   🎬 Stage direction in text: [Voice: {char_desc}]")
+        instruction = self._build_tts_instruction(who)
+        print(f"🔊 TTS for {who}: instruction ({len(instruction)} chars): {instruction[:200]}...", flush=True)
         def _call():
-            import sys
-            print(f"   📦 OpenAI SDK version: {openai.__version__}", flush=True)
-            print(f"   📨 input ({len(tts_input)} chars): {tts_input[:200]}...", flush=True)
-            print(f"   📨 instructions ({len(instruction)} chars): {instruction[:200]}...", flush=True)
-            try:
-                resp = self.openai_client.audio.speech.create(
-                    model=TTS_MODEL, voice=voice, input=tts_input,
-                    instructions=instruction,
-                    response_format="mp3", speed=speed,
-                )
-                print(f"   ✅ TTS API call succeeded, {len(resp.content)} bytes", flush=True)
-                return resp.content
-            except TypeError as e:
-                print(f"   ⚠️ TypeError: {e} — instructions param NOT SUPPORTED by this SDK!", flush=True)
-                resp = self.openai_client.audio.speech.create(
-                    model=TTS_MODEL, voice=voice, input=tts_input,
-                    response_format="mp3", speed=speed,
-                )
-                print(f"   ✅ Fallback TTS succeeded (no instructions), {len(resp.content)} bytes", flush=True)
-                return resp.content
-                del kwargs["instructions"]
-                resp = self.openai_client.audio.speech.create(**kwargs)
-                return resp.content
+            resp = self.openai_client.audio.speech.create(
+                model=TTS_MODEL, voice=voice, input=text,
+                instructions=instruction,
+                response_format="mp3", speed=speed,
+            )
+            print(f"   ✅ TTS done, {len(resp.content)} bytes", flush=True)
+            return resp.content
         return await asyncio.to_thread(_call)
 
     # ---- Prompt building ----
