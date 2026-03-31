@@ -126,6 +126,9 @@ def save_messages_only(sid: str, engine: TwoBotsEngine) -> None:
         SESSIONS[sid]["rounds_since_filler"] = engine.state.rounds_since_filler
         SESSIONS[sid]["next_filler_at"] = engine.state.next_filler_at
         SESSIONS[sid]["autopilot_batch_count"] = engine.state.autopilot_batch_count
+        SESSIONS[sid]["prev_format"] = engine.state.prev_format
+        SESSIONS[sid]["prev_topic"] = engine.state.prev_topic
+        SESSIONS[sid]["last_mix_pick"] = engine.state.last_mix_pick
         # ---- PING-PONG MODE ----
         SESSIONS[sid]["pingpong_msg_count"] = engine.state.pingpong_msg_count
         SESSIONS[sid]["pingpong_conclusions"] = list(engine.state.pingpong_conclusions)
