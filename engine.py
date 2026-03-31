@@ -1265,12 +1265,17 @@ Return ONLY the six fields, nothing else."""
             agree_text = AGREEABLENESS_LEGACY["disagreeable"]
         # 0.4-0.6 = balanced, say nothing
 
+        # Custom personality text
+        custom = self._s(f"{prefix}_custom") or ""
+
         # Build the character line only if something is non-default
         character_parts = []
         if agree_text:
             character_parts.append(agree_text)
         if p_text:
             character_parts.append(f"{p_strength_word} {p_text}".strip() if p_strength_word else p_text)
+        if custom.strip():
+            character_parts.append(custom.strip())
         if quirk_text:
             character_parts.append(quirk_text)
         character_line = f"\nYour character: {'. '.join(character_parts)}." if character_parts else ""
