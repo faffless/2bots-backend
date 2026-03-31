@@ -947,6 +947,7 @@ async def update_settings(request: Request, req: SettingsUpdate):
     engine.update_settings(req.settings)
     new_format = engine._s("mode")
     new_topic = engine._s("topic")
+    log("settings", f"Format: {old_format} -> {new_format}, Topic: {old_topic} -> {new_topic}")
     # Only reset history if format or topic changed — personality tweaks should preserve context
     if old_format != new_format or old_topic != new_topic:
         engine.state.gpt_msgs.clear()
