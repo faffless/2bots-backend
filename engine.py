@@ -391,7 +391,7 @@ Pronunciation:
 Return ONLY the six fields, nothing else."""
 
         resp = self.claude_client.messages.create(
-            model="claude-3-5-haiku-latest",
+            model=CLAUDE_MODEL,
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}],
         )
