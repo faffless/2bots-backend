@@ -489,7 +489,13 @@ WORD_LIMIT_TIERS = [
     {"label": "full",   "chance": 0.50, "fraction": 1.0, "min": 20, "prompt": "Keep your response under {limit} words."},
 ]
 
-WORD_LIMIT_DEFAULT = 80  # Used when the user hasn't set the slider
+WORD_LIMIT_DEFAULT = 30  # Fallback when user hasn't set the slider
+
+WORD_LIMIT_BY_FORMAT = {
+    "research": 80,
+    "conversation": 50,
+    # All other formats fall back to WORD_LIMIT_DEFAULT (30)
+}
 
 
 # Used in legacy system prompt (_build_system_prompt)
@@ -760,8 +766,8 @@ REVIEW_INSTRUCTION = {
     "debate": (
         'This is motion {milestone_num} of {milestone_total}. '
         'In under 50 words: based on the last few exchanges, state whether you think you or {other_name} made the stronger case on this point. '
-        'Start with "I believe I win" or "I admit that" then briefly explain why.\n'
-        'Do not prefix with your name. No markdown, no lists.'
+        'Start with "I propose that we agree on" or "Can we at least agree that" then briefly explain why.\n'
+        'Do not prefix with your name. No markdown, no lists.' 
     ),
     "advice": (
         'This is recommendation {milestone_num} of {milestone_total}. '
