@@ -713,14 +713,18 @@ class TwoBotsEngine:
                 raise ValueError("Response was not a valid list of messages")
 
             # Validate each message
+            speaker_map = {"G": "gpt", "C": "claude", "g": "gpt", "c": "claude",
+                           "gpt": "gpt", "claude": "claude", "GPT": "gpt", "Claude": "claude",
+                           "ChatGPT": "gpt", "chatgpt": "gpt"}
             validated = []
             for msg in batch:
                 if isinstance(msg, dict) and "speaker" in msg and "text" in msg:
-                    if msg["speaker"] in ("gpt", "claude"):
+                    speaker = speaker_map.get(msg["speaker"])
+                    if speaker:
                         text = str(msg["text"])
                         # Strip speaker prefixes the AI sometimes includes (e.g. "G: ...", "C: ...")
                         text = re.sub(r'^[GC]:\s*', '', text)
-                        validated.append({"speaker": msg["speaker"], "text": text})
+                        validated.append({"speaker": speaker, "text": text})
             if len(validated) < 2:
                 raise ValueError("Too few valid messages after validation")
             batch = validated
