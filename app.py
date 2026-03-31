@@ -412,6 +412,11 @@ async def start_stream(request: Request, req: StartRequest):
     save(sid, engine)
     SESSION_LAST_ACTIVE[sid] = time.time()
 
+    # Set up TTS character cache for this new session
+    if sid not in TTS_CHARACTER_CACHE:
+        TTS_CHARACTER_CACHE[sid] = {}
+    engine._tts_char_cache = TTS_CHARACTER_CACHE[sid]
+
     current_mode = engine.state.settings.get("mode", "conversation")
     is_pingpong = current_mode in PINGPONG_MODES
 
