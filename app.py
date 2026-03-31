@@ -977,35 +977,24 @@ async def update_settings(request: Request, req: SettingsUpdate):
     changed_personality = set(changed.keys()) & personality_keys
     if changed_personality:
         sid = req.session_id
-        # Figure out which bots need new TTS descriptions
         bots_to_update = set()
         for k in changed_personality:
             bots_to_update.add("gpt" if k.startswith("gpt") else "claude")
-        gen_at = PREFETCH_GENERATION.get(sid, 0)
-        async def _gen_tts_chars():
-            try:
-                eng = get_engine(sid)
-                for bot in bots_to_update:
-                    char_desc = eng.get_character_description(bot)
-                    if not char_desc.strip():
-                        # No character set — clear any cached TTS description
-                        if sid in TTS_CHARACTER_CACHE and bot in TTS_CHARACTER_CACHE[sid]:
-                            del TTS_CHARACTER_CACHE[sid][bot]
-                        continue
-                    if PREFETCH_GENERATION.get(sid, 0) != gen_at:
-                        log("tts_char", f"Discarding stale TTS character gen for {sid[:8]}...")
-                        return
-                    tts_desc = await asyncio.to_thread(eng.generate_tts_character_description, char_desc)
-                    if PREFETCH_GENERATION.get(sid, 0) != gen_at:
-                        log("tts_char", f"Discarding stale TTS character gen for {sid[:8]}...")
-                        return
-                    if sid not in TTS_CHARACTER_CACHE:
-                        TTS_CHARACTER_CACHE[sid] = {}
-                    TTS_CHARACTER_CACHE[sid][bot] = tts_desc
-                    log("tts_char", f"Generated TTS character for {bot} in {sid[:8]}...: {tts_desc[:80]}...")
-            except Exception as e:
-                log("tts_char", f"TTS character generation failed: {e}")
-        asyncio.create_task(_gen_tts_chars())
+        try:
+            eng = get_engine(sid)
+            for bot in bots_to_update:
+                char_desc = eng.get_character_description(bot)
+                if not char_desc.strip():
+                    if sid in TTS_CHARACTER_CACHE and bot in TTS_CHARACTER_CACHE[sid]:
+                        del TTS_CHARACTER_CACHE[sid][bot]
+                    continue
+                tts_desc = await asyncio.to_thread(eng.generate_tts_character_description, char_desc)
+                if sid not in TTS_CHARACTER_CACHE:
+                    TTS_CHARACTER_CACHE[sid] = {}
+                TTS_CHARACTER_CACHE[sid][bot] = tts_desc
+                log("tts_char", f"Generated TTS character for {bot} in {sid[:8]}...: {tts_desc[:80]}...")
+        except Exception as e:
+            log("tts_char", f"TTS character generation failed: {e}")
 
     return {"ok": True}
 
