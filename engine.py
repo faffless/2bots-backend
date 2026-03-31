@@ -428,12 +428,26 @@ Return ONLY the six fields, nothing else."""
             tts_input = f"[Voice: {char_desc}] {text}"
             print(f"   🎬 Stage direction in text: [Voice: {char_desc}]")
         def _call():
-            resp = self.openai_client.audio.speech.create(
+            import openai as _oai
+            print(f"   📦 OpenAI SDK version: {_oai.__version__}")
+            kwargs = dict(
                 model=TTS_MODEL, voice=voice, input=tts_input,
                 instructions=instruction,
                 response_format="mp3", speed=speed,
             )
-            return resp.content
+            print(f"   📨 TTS API kwargs: model={kwargs['model']}, voice={kwargs['voice']}, speed={kwargs['speed']}")
+            print(f"   📨 input ({len(kwargs['input'])} chars): {kwargs['input'][:150]}...")
+            print(f"   📨 instructions ({len(kwargs['instructions'])} chars): {kwargs['instructions'][:150]}...")
+            try:
+                resp = self.openai_client.audio.speech.create(**kwargs)
+                print(f"   ✅ TTS API call succeeded, got {len(resp.content)} bytes")
+                return resp.content
+            except TypeError as e:
+                print(f"   ⚠️ TypeError with instructions param: {e}")
+                print(f"   ⚠️ FALLING BACK without instructions param")
+                del kwargs["instructions"]
+                resp = self.openai_client.audio.speech.create(**kwargs)
+                return resp.content
         return await asyncio.to_thread(_call)
 
     # ---- Prompt building ----
