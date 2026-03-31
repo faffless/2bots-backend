@@ -403,7 +403,7 @@ Return ONLY the six fields, nothing else."""
         """Build a voice instruction. Uses Claude-generated description if cached, else falls back."""
         # If we have a Claude-generated TTS character description, use it
         if cached_tts_char:
-            return f"{TTS_BASE_INSTRUCTION}\n{cached_tts_char}"
+            return f"{cached_tts_char}\n{TTS_BASE_INSTRUCTION}"
 
         # Fallback: build from raw character parts
         char_desc = self.get_character_description(who)
