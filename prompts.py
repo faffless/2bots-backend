@@ -23,6 +23,19 @@
 """
 
 # =============================================================================
+#  TTS — Model & Voice Instructions
+# =============================================================================
+
+TTS_MODEL = "gpt-4o-mini-tts"
+
+# Base voice instruction applied to all TTS — character traits are appended
+TTS_BASE_INSTRUCTION = (
+    "Speak naturally and expressively like a real person in conversation. "
+    "React emotionally — laugh if something's funny, pause if something's heavy, "
+    "speed up when excited."
+)
+
+# =============================================================================
 #  FORMAT DESCRIPTIONS — the style/feel of each mode
 # =============================================================================
 
