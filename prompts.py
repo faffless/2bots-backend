@@ -489,13 +489,7 @@ WORD_LIMIT_TIERS = [
     {"label": "full",   "chance": 0.50, "fraction": 1.0, "min": 20, "prompt": "Keep your response under {limit} words."},
 ]
 
-WORD_LIMIT_DEFAULT = 30  # Fallback when user hasn't set the slider
-
-WORD_LIMIT_BY_FORMAT = {
-    "research": 80,
-    "conversation": 50,
-    # All other formats fall back to WORD_LIMIT_DEFAULT (30)
-}
+WORD_LIMIT_DEFAULT = 30  # Fallback when the frontend doesn't send a value
 
 
 # Used in legacy system prompt (_build_system_prompt)

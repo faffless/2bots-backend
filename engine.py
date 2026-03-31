@@ -46,7 +46,7 @@ from prompts import (
     LEGACY_TURN_GOAL_AUTO, LEGACY_TURN_GOAL_USER_SPOKE,
     LEGACY_QUIRK_REMINDER, LEGACY_CUSTOM_STRENGTH,
     CONCLUSIONS_HEADER, MILESTONE_WORD,
-    WORD_LIMIT_TIERS, WORD_LIMIT_DEFAULT, WORD_LIMIT_BY_FORMAT,
+    WORD_LIMIT_TIERS, WORD_LIMIT_DEFAULT,
 )
 
 
@@ -1274,8 +1274,7 @@ Return ONLY the six fields, nothing else."""
 
         # Word limit — randomized per response for natural rhythm
         user_word_limit = self._s(f"{prefix}_word_limit")  # None or int
-        format_default = WORD_LIMIT_BY_FORMAT.get(mode, WORD_LIMIT_DEFAULT)
-        base_limit = user_word_limit if user_word_limit is not None else format_default
+        base_limit = user_word_limit if user_word_limit is not None else WORD_LIMIT_DEFAULT
         roll = random.random()
         cumulative = 0.0
         chosen_tier = WORD_LIMIT_TIERS[-1]  # fallback to last tier
