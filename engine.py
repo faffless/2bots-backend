@@ -413,13 +413,18 @@ Return ONLY the six fields, nothing else."""
         instruction = self._build_tts_instruction(who)
         print(f"🔊 TTS for {who}: instruction ({len(instruction)} chars): {instruction[:200]}...", flush=True)
         def _call():
-            resp = self.openai_client.audio.speech.create(
+            # Use streaming API — non-streaming create() doesn't fully apply instructions
+            chunks = []
+            with self.openai_client.audio.speech.with_streaming_response.create(
                 model=TTS_MODEL, voice=voice, input=text,
                 instructions=instruction,
                 response_format="mp3", speed=speed,
-            )
-            print(f"   ✅ TTS done, {len(resp.content)} bytes", flush=True)
-            return resp.content
+            ) as response:
+                for chunk in response.iter_bytes(chunk_size=4096):
+                    chunks.append(chunk)
+            result = b"".join(chunks)
+            print(f"   ✅ TTS done (streaming), {len(result)} bytes", flush=True)
+            return result
         return await asyncio.to_thread(_call)
 
     # ---- Prompt building ----

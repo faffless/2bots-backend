@@ -1023,36 +1023,60 @@ def delete_session(session_id: str):
 
 @app.get("/test/tts")
 async def test_tts(request: Request):
-    """Raw TTS test — try every voice with pirate instructions."""
+    """Compare non-streaming vs streaming TTS with instructions."""
     import base64
     from openai import OpenAI
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     text = "Well I think that's a really interesting point, and I have to say I completely disagree with you on this one."
-    pirate = "Speak as a gruff, fat pirate captain with a heavy Spanish accent. Deep gravelly voice, slur your words, roll your R's. Say 'arrr' occasionally."
+    pirate = (
+        "Voice: Gruff, weathered pirate captain with a heavy Spanish accent.\n"
+        "Tone: Aggressive and boisterous, mixing threats with dark humor.\n"
+        "Dialect: Thick Spanish accent, rolling R's, dropping consonants.\n"
+        "Pronunciation: Slurred and lazy, like someone who's been drinking rum all day.\n"
+        "Features: Occasional 'arrr', 'matey', and heavy breathing between phrases."
+    )
 
-    voices = ["ash", "coral", "sage", "onyx", "nova", "shimmer", "fable", "alloy", "echo", "ballad"]
+    voices = ["coral", "ash", "onyx", "nova"]
     sections = []
     for v in voices:
-        # Plain
+        # Non-streaming (what we were using)
         r1 = client.audio.speech.create(
-            model="gpt-4o-mini-tts", voice=v, input=text, response_format="mp3",
+            model="gpt-4o-mini-tts", voice=v, input=text,
+            instructions=pirate, response_format="mp3",
         )
         a1 = base64.b64encode(r1.content).decode()
-        # With pirate instructions
-        r2 = client.audio.speech.create(
-            model="gpt-4o-mini-tts", voice=v, input=text, instructions=pirate, response_format="mp3",
-        )
-        a2 = base64.b64encode(r2.content).decode()
+
+        # Streaming (what OpenAI examples use)
+        chunks = []
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts", voice=v, input=text,
+            instructions=pirate, response_format="mp3",
+        ) as response:
+            for chunk in response.iter_bytes(4096):
+                chunks.append(chunk)
+        a2 = base64.b64encode(b"".join(chunks)).decode()
+
+        # Plain (no instructions, streaming)
+        chunks2 = []
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts", voice=v, input=text,
+            response_format="mp3",
+        ) as response:
+            for chunk in response.iter_bytes(4096):
+                chunks2.append(chunk)
+        a3 = base64.b64encode(b"".join(chunks2)).decode()
+
         sections.append(f"""
 <h3>{v.title()}</h3>
-<p>Plain: <audio controls src="data:audio/mpeg;base64,{a1}"></audio></p>
-<p>Pirate: <audio controls src="data:audio/mpeg;base64,{a2}"></audio></p>
+<p>Plain (no instructions): <audio controls src="data:audio/mpeg;base64,{a3}"></audio></p>
+<p>Pirate (non-streaming): <audio controls src="data:audio/mpeg;base64,{a1}"></audio></p>
+<p>Pirate (streaming): <audio controls src="data:audio/mpeg;base64,{a2}"></audio></p>
 """)
 
     html = f"""<html><body style="font-family:sans-serif;max-width:700px;margin:40px auto">
-<h2>TTS Voice Comparison — Plain vs Pirate</h2>
+<h2>TTS: Plain vs Pirate — non-streaming vs streaming</h2>
 <p><b>Text:</b> {text}</p>
-<p><b>Instruction:</b> {pirate}</p>
+<p><b>Instruction:</b><pre>{pirate}</pre></p>
 {''.join(sections)}
 </body></html>"""
     return HTMLResponse(html)
