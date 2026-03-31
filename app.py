@@ -105,6 +105,7 @@ SESSION_TTL = 1800  # 30 minutes
 # ---- Prefetch caches ----
 PREFETCH_CACHE: Dict[str, Dict[str, Any]] = {}
 RESEARCH_PREFETCH: Dict[str, Dict[str, Any]] = {}
+PREFETCH_GENERATION: Dict[str, int] = {}  # bumped on any invalidation; prefetch discards if stale
 
 
 @app.on_event("startup")
@@ -133,6 +134,7 @@ def cleanup_stale_sessions():
         SESSION_LAST_ACTIVE.pop(sid, None)
         PREFETCH_CACHE.pop(sid, None)
         RESEARCH_PREFETCH.pop(sid, None)
+        PREFETCH_GENERATION.pop(sid, None)
     if stale:
         log("cleanup", f"Purged {len(stale)} stale sessions. Active: {len(SESSIONS)}")
 
@@ -314,12 +316,17 @@ async def _stream_batch(engine: TwoBotsEngine, batch: list, who_generated: str, 
         log("autopilot", f"TTS generated fresh in {t_tts-t0:.1f}s for {len(batch)} msgs")
 
     # Kick off prefetch immediately — generate text + TTS so next batch is instant
+    gen_at_start = PREFETCH_GENERATION.get(sid, 0)
     async def _do_prefetch():
         try:
             pf_engine = get_engine(sid)
             pf_batch = await asyncio.to_thread(
                 pf_engine.generate_autopilot_batch, next_generator
             )
+            # Check if settings changed while we were generating
+            if PREFETCH_GENERATION.get(sid, 0) != gen_at_start:
+                log("prefetch", f"Discarding stale prefetch for {sid[:8]}... (settings changed)")
+                return
             save_messages_only(sid, pf_engine)
             # Pre-generate TTS for all prefetched messages
             pf_gpt_voice = pf_engine.get_gpt_voice()
@@ -328,6 +335,10 @@ async def _stream_batch(engine: TwoBotsEngine, batch: list, who_generated: str, 
                 voice = pf_gpt_voice if msg["speaker"] == "gpt" else pf_claude_voice
                 return await pf_engine.generate_tts_bytes(msg["text"], voice, msg["speaker"])
             pf_audio = await asyncio.gather(*[_pf_tts(m) for m in pf_batch])
+            # Final check before storing — settings may have changed during TTS
+            if PREFETCH_GENERATION.get(sid, 0) != gen_at_start:
+                log("prefetch", f"Discarding stale prefetch for {sid[:8]}... (settings changed during TTS)")
+                return
             PREFETCH_CACHE[sid] = {
                 "batch": pf_batch,
                 "audio": list(pf_audio),
@@ -469,12 +480,19 @@ async def start_stream(request: Request, req: StartRequest):
 
             # Prefetch next response + TTS in background
             next_who = opener_who  # alternates back
+            r_gen = PREFETCH_GENERATION.get(sid, 0)
             async def _prefetch():
                 try:
                     pf_engine = get_engine(sid)
                     pf_text = await asyncio.to_thread(pf_engine.generate_research_response, next_who)
+                    if PREFETCH_GENERATION.get(sid, 0) != r_gen:
+                        log("research", f"Discarding stale research prefetch for {sid[:8]}...")
+                        return
                     pf_voice = pf_engine.get_gpt_voice() if next_who == "gpt" else pf_engine.get_claude_voice()
                     pf_audio = await pf_engine.generate_tts_bytes(pf_text, pf_voice, next_who)
+                    if PREFETCH_GENERATION.get(sid, 0) != r_gen:
+                        log("research", f"Discarding stale research prefetch for {sid[:8]}... (changed during TTS)")
+                        return
                     RESEARCH_PREFETCH[sid] = {"who": next_who, "text": pf_text, "audio": pf_audio}
                     log("research", f"Prefetched {next_who}'s response + TTS for {sid[:8]}...")
                 except Exception as e:
@@ -538,10 +556,14 @@ async def start_stream(request: Request, req: StartRequest):
 
             # Prefetch next batch in background (text + TTS)
             next_generator = "gpt" if batch_generator == "claude" else "claude"
+            start_gen = PREFETCH_GENERATION.get(sid, 0)
             async def _prefetch_batch():
                 try:
                     pf_engine = get_engine(sid)
                     pf_batch = await asyncio.to_thread(pf_engine.generate_autopilot_batch, next_generator)
+                    if PREFETCH_GENERATION.get(sid, 0) != start_gen:
+                        log("prefetch", f"Discarding stale start prefetch for {sid[:8]}...")
+                        return
                     save_messages_only(sid, pf_engine)
                     # Pre-generate TTS too
                     pf_gpt_voice = pf_engine.get_gpt_voice()
@@ -550,6 +572,9 @@ async def start_stream(request: Request, req: StartRequest):
                         voice = pf_gpt_voice if msg["speaker"] == "gpt" else pf_claude_voice
                         return await pf_engine.generate_tts_bytes(msg["text"], voice, msg["speaker"])
                     pf_audio = await asyncio.gather(*[_pf_tts(m) for m in pf_batch])
+                    if PREFETCH_GENERATION.get(sid, 0) != start_gen:
+                        log("prefetch", f"Discarding stale start prefetch for {sid[:8]}... (changed during TTS)")
+                        return
                     PREFETCH_CACHE[sid] = {
                         "batch": pf_batch,
                         "audio": list(pf_audio),
@@ -651,6 +676,7 @@ async def filler_stream(request: Request, req: FillerRequest):
     log("filler", f"User spoke in {req.session_id[:8]}...: '{req.user_text[:50]}...'")
 
     # ---- CHAT MODE ---- Invalidate prefetch cache — user spoke, so any cached batch is stale
+    PREFETCH_GENERATION[req.session_id] = PREFETCH_GENERATION.get(req.session_id, 0) + 1
     if req.session_id in PREFETCH_CACHE:
         log("chat_mode", f"Clearing stale prefetch cache for {req.session_id[:8]}... (user spoke)")
         del PREFETCH_CACHE[req.session_id]
@@ -858,13 +884,20 @@ async def research_stream(request: Request, req: ResearchRequest):
 
         # Start prefetch for the OTHER bot: text + TTS (skip if complete)
         if not engine.state.pingpong_complete:
+            r_gen2 = PREFETCH_GENERATION.get(sid, 0)
             async def _prefetch_other():
                 try:
                     pf_engine = get_engine(sid)
                     pf_text = await asyncio.to_thread(pf_engine.generate_research_response, other)
+                    if PREFETCH_GENERATION.get(sid, 0) != r_gen2:
+                        log("research", f"Discarding stale research prefetch for {sid[:8]}...")
+                        return
                     # Also prefetch TTS so next turn is instant
                     pf_voice = pf_engine.get_gpt_voice() if other == "gpt" else pf_engine.get_claude_voice()
                     pf_audio = await pf_engine.generate_tts_bytes(pf_text, pf_voice, other)
+                    if PREFETCH_GENERATION.get(sid, 0) != r_gen2:
+                        log("research", f"Discarding stale research prefetch for {sid[:8]}... (changed during TTS)")
+                        return
                     RESEARCH_PREFETCH[sid] = {"who": other, "text": pf_text, "audio": pf_audio}
                     log("research", f"Prefetched {other}'s response + TTS for {sid[:8]}...")
                 except Exception as e:
@@ -912,6 +945,7 @@ async def update_settings(request: Request, req: SettingsUpdate):
     engine.update_settings(req.settings)
     save(req.session_id, engine)
     # Invalidate prefetch — it was generated with old settings
+    PREFETCH_GENERATION[req.session_id] = PREFETCH_GENERATION.get(req.session_id, 0) + 1
     if req.session_id in PREFETCH_CACHE:
         log("settings", f"Clearing prefetch cache for {req.session_id[:8]}...")
         PREFETCH_CACHE.pop(req.session_id, None)
@@ -931,6 +965,7 @@ def delete_session(session_id: str):
     SESSION_LAST_ACTIVE.pop(session_id, None)
     PREFETCH_CACHE.pop(session_id, None)
     RESEARCH_PREFETCH.pop(session_id, None)
+    PREFETCH_GENERATION.pop(session_id, None)
     return {"deleted": True}
 
 
