@@ -942,13 +942,24 @@ async def update_settings(request: Request, req: SettingsUpdate):
     if not data:
         raise HTTPException(status_code=404, detail="Session not found")
     engine = TwoBotsEngine.from_state(data)
+    old_format = engine._s("mode")
+    old_topic = engine._s("topic")
     engine.update_settings(req.settings)
+    new_format = engine._s("mode")
+    new_topic = engine._s("topic")
+    # Only reset history if format or topic changed — personality tweaks should preserve context
+    if old_format != new_format or old_topic != new_topic:
+        engine.state.gpt_msgs.clear()
+        engine.state.claude_msgs.clear()
+        engine.state.autopilot_batch_count = 0
+        log("settings", f"Full reset for {req.session_id[:8]}... (format/topic changed)")
     save(req.session_id, engine)
     # Invalidate prefetch — it was generated with old settings
     PREFETCH_GENERATION[req.session_id] = PREFETCH_GENERATION.get(req.session_id, 0) + 1
     if req.session_id in PREFETCH_CACHE:
         log("settings", f"Clearing prefetch cache for {req.session_id[:8]}...")
         PREFETCH_CACHE.pop(req.session_id, None)
+    RESEARCH_PREFETCH.pop(req.session_id, None)
     return {"ok": True}
 
 
