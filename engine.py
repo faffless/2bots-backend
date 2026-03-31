@@ -415,10 +415,13 @@ Return ONLY the six fields, nothing else."""
         speed = self.get_tts_speed(who)
         # _tts_char_cache is a live reference to TTS_CHARACTER_CACHE[sid] dict, set by app.py
         raw_cache = getattr(self, '_tts_char_cache', {})
-        print(f"🔍 TTS CACHE DEBUG for {who}: has_attr={hasattr(self, '_tts_char_cache')}, cache_id={id(raw_cache)}, keys={list(raw_cache.keys())}, val_len={len(raw_cache.get(who, ''))}")
         cached_tts_char = raw_cache.get(who, "")
         instruction = self._build_tts_instruction(who, cached_tts_char)
-        print(f"🔊 TTS instruction for {who}: {instruction[:120]}...")
+        if cached_tts_char:
+            print(f"🔊 TTS for {who}: ✅ CHARACTER VOICE ACTIVE ({len(cached_tts_char)} chars) | Full instruction: {len(instruction)} chars")
+            print(f"   Character: {cached_tts_char[:200]}")
+        else:
+            print(f"🔊 TTS for {who}: ❌ BASE VOICE ONLY (no character cached)")
         def _call():
             resp = self.openai_client.audio.speech.create(
                 model=TTS_MODEL, voice=voice, input=text,
