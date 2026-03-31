@@ -27,6 +27,7 @@ from prompts import (
     SCRIPTED_BATCH_SYSTEM, SCRIPTED_BATCH_PROMPT,
     SCRIPTED_CONTEXT_FIRST_BATCH,
     SCRIPTED_CONTEXT_CONTINUATION, SCRIPTED_RANDOM_TOPIC_IMMERSIVE,
+    PACING_NUDGES,
     SCRIPTED_OPENER_SYSTEM, SCRIPTED_OPENER_PROMPT, SCRIPTED_OPENER_DESCRIPTIONS,
     BRIDGE_SYSTEM, BRIDGE_PROMPT,
     SINGLE_BOT_SYSTEM, SINGLE_BOT_PROMPT,
@@ -652,6 +653,7 @@ class TwoBotsEngine:
         user_instruction = f'\nYou MUST build on what the user said: "{user_request}"' if user_request else ""
         gpt_character_line = f"{gpt_strength_word} {gpt_traits}".strip() if gpt_strength_word else gpt_traits
         claude_character_line = f"{claude_strength_word} {claude_traits}".strip() if claude_strength_word else claude_traits
+        pacing_nudge = random.choice(PACING_NUDGES)
         prompt = SCRIPTED_BATCH_PROMPT.format(
             first_speaker_instruction=first_speaker_instruction,
             user_instruction=user_instruction,
@@ -659,6 +661,7 @@ class TwoBotsEngine:
             num_messages=num_messages,
             interaction_type=format_role_data.get("interaction", "INTERACTION").upper(),
             history_text=history_text,
+            pacing_nudge=pacing_nudge,
         )
 
         # ---- Log the full prompt ----

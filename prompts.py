@@ -508,8 +508,12 @@ SCRIPTED_BATCH_PROMPT = """[INSTRUCTIONS]
 {first_speaker_instruction}{user_instruction}{context_instruction}
 
 WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS {interaction_type}.
-THIS MUST NOT FALL INTO A PREDICTABLE PATTERN.
-Some lines should be 2 words. Some 20. Very rarely 50.
+CRITICAL — VARY MESSAGE LENGTHS DRAMATICALLY:
+- At least 3 messages MUST be under 6 words (reactions, quips, one-liners)
+- At least 2 messages MUST be over 25 words
+- NEVER write more than 2 messages in a row that are similar length
+- If the conversation history has uniform lengths, BREAK that pattern immediately
+{pacing_nudge}
 
 [CONVERSATION HISTORY]
 {history_text}
@@ -530,6 +534,18 @@ SCRIPTED_CONTEXT_CONTINUATION = (
     '\nThis is a CONTINUATION. Don\'t repeat or rephrase anything from the conversation history. '
     'The conversation must evolve and feel like it\'s going somewhere new.'
 )
+
+# Pacing nudges — one is picked at random per batch to break patterns
+PACING_NUDGES = [
+    "Start this batch with a rapid-fire exchange — 3 or 4 short punchy lines before anything longer.",
+    "Open with one longer, scene-setting message, then snap into quick back-and-forth.",
+    "Make this batch feel chaotic — interrupt, overlap, cut each other off mid-thought.",
+    "Build tension slowly — start short, let the messages get progressively longer.",
+    "One bot should dominate the start with a longer monologue, then the other fires back with short jabs.",
+    "This batch should feel like a real argument — short, sharp, overlapping reactions.",
+    "Mix in at least one single-word response and one response that's a full thought.",
+    "Make the rhythm unpredictable — long, short, short, long, tiny, medium. No pattern.",
+]
 
 # Random topic instruction for immersive formats
 SCRIPTED_RANDOM_TOPIC_IMMERSIVE = (
