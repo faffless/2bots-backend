@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -1019,6 +1019,51 @@ def delete_session(session_id: str):
     RESEARCH_PREFETCH.pop(session_id, None)
     PREFETCH_GENERATION.pop(session_id, None)
     return {"deleted": True}
+
+
+@app.get("/test/tts")
+async def test_tts():
+    """Raw TTS test — no engine, no cache. Just OpenAI API directly.
+    Returns two audio files: one plain, one with pirate instructions.
+    Visit /test/tts in browser to hear the difference."""
+    import base64
+    from openai import OpenAI
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    text = "Well I think that's a really interesting point, and I have to say I completely disagree with you on this one."
+
+    # Call 1: Plain, no instructions
+    resp1 = client.audio.speech.create(
+        model="gpt-4o-mini-tts", voice="onyx", input=text,
+        response_format="mp3",
+    )
+    audio1 = base64.b64encode(resp1.content).decode()
+
+    # Call 2: With pirate instructions
+    resp2 = client.audio.speech.create(
+        model="gpt-4o-mini-tts", voice="onyx", input=text,
+        instructions="Speak as a gruff, fat pirate captain with a heavy Spanish accent. Deep gravelly voice, slur your words, roll your R's.",
+        response_format="mp3",
+    )
+    audio2 = base64.b64encode(resp2.content).decode()
+
+    # Call 3: Stage direction in text
+    resp3 = client.audio.speech.create(
+        model="gpt-4o-mini-tts", voice="onyx",
+        input=f"(spoken as a terrified, meek little mouse with a British accent, squeaky and trembling) {text}",
+        response_format="mp3",
+    )
+    audio3 = base64.b64encode(resp3.content).decode()
+
+    return HTMLResponse(f"""<html><body style="font-family:sans-serif;max-width:600px;margin:40px auto">
+<h2>TTS Test — Same text, different instructions</h2>
+<h3>1. Plain (no instructions)</h3>
+<audio controls src="data:audio/mpeg;base64,{audio1}"></audio>
+<h3>2. Pirate instructions (via instructions param)</h3>
+<audio controls src="data:audio/mpeg;base64,{audio2}"></audio>
+<h3>3. Mouse stage direction (in input text)</h3>
+<audio controls src="data:audio/mpeg;base64,{audio3}"></audio>
+<p><b>Text:</b> {text}</p>
+</body></html>""")
 
 
 if __name__ == "__main__":
