@@ -422,9 +422,14 @@ Return ONLY the six fields, nothing else."""
             print(f"   Character: {cached_tts_char[:200]}")
         else:
             print(f"🔊 TTS for {who}: ❌ BASE VOICE ONLY (no character cached)")
+        tts_input = text
+        char_desc = self.get_character_description(who)
+        if char_desc:
+            tts_input = f"[Voice: {char_desc}] {text}"
+            print(f"   🎬 Stage direction in text: [Voice: {char_desc}]")
         def _call():
             resp = self.openai_client.audio.speech.create(
-                model=TTS_MODEL, voice=voice, input=text,
+                model=TTS_MODEL, voice=voice, input=tts_input,
                 instructions=instruction,
                 response_format="mp3", speed=speed,
             )
