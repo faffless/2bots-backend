@@ -181,8 +181,6 @@ DEFAULTS = {
     "claude_quirks": [],
     "gpt_custom": "",
     "claude_custom": "",
-    "gpt_custom_trait": "",
-    "claude_custom_trait": "",
     "gpt_personality_strength": 1,
     "claude_personality_strength": 1,
     "gpt_quirk_strength": 1,
@@ -367,11 +365,6 @@ class TwoBotsEngine:
         custom = self._s(f"{prefix}_custom") or ""
         if custom.strip():
             parts.append(custom.strip())
-
-        # Custom trait
-        custom_trait = self._s(f"{prefix}_custom_trait") or ""
-        if custom_trait.strip():
-            parts.append(custom_trait.strip())
 
         # Agreeableness
         a = self.state.personality
@@ -586,14 +579,6 @@ class TwoBotsEngine:
                     parts.append(f"{strength_word} {custom.strip()}")
                 else:
                     parts.append(custom.strip())
-
-            # Custom trait
-            custom_trait = self._s(f"{prefix}_custom_trait") or ""
-            if custom_trait.strip():
-                if strength_word:
-                    parts.append(f"{strength_word} {custom_trait.strip()}")
-                else:
-                    parts.append(custom_trait.strip())
 
             return ", ".join(parts) if parts else ""
 
@@ -894,9 +879,6 @@ class TwoBotsEngine:
             custom = self._s(f"{prefix}_custom") or ""
             if custom.strip():
                 parts.append(f"{strength_word} {custom.strip()}" if strength_word else custom.strip())
-            custom_trait = self._s(f"{prefix}_custom_trait") or ""
-            if custom_trait.strip():
-                parts.append(f"{strength_word} {custom_trait.strip()}" if strength_word else custom_trait.strip())
             return ", ".join(parts) if parts else ""
 
         gpt_character = build_character("gpt")
@@ -1030,9 +1012,6 @@ class TwoBotsEngine:
             custom = self._s(f"{prefix}_custom") or ""
             if custom.strip():
                 parts.append(f"{strength_word} {custom.strip()}" if strength_word else custom.strip())
-            custom_trait = self._s(f"{prefix}_custom_trait") or ""
-            if custom_trait.strip():
-                parts.append(f"{strength_word} {custom_trait.strip()}" if strength_word else custom_trait.strip())
             return ", ".join(parts) if parts else ""
 
         bot_name = "ChatGPT" if bot == "gpt" else "Claude"
