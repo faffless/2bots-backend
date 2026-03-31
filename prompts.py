@@ -513,9 +513,9 @@ SCRIPTED_BATCH_SYSTEM = """You are an extremely talented {role_name}. Return ONL
 {agree_section}
 
 [CHARACTERS]
-"G" is {gpt_character_line}.
-"C" is {claude_character_line}.
-If addressing the user, say "you"."""
+ChatGPT is {gpt_character_line}.
+Claude is {claude_character_line}.
+Never swap these roles. If addressing the user, say "you"."""
 
 SCRIPTED_BATCH_PROMPT = """[INSTRUCTIONS]
 {first_speaker_instruction}{user_instruction}{context_instruction}
