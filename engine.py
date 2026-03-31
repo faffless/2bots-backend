@@ -416,8 +416,7 @@ Return ONLY the six fields, nothing else."""
         # _tts_char_cache is a live reference to TTS_CHARACTER_CACHE[sid] dict, set by app.py
         cached_tts_char = getattr(self, '_tts_char_cache', {}).get(who, "")
         instruction = self._build_tts_instruction(who, cached_tts_char)
-        if cached_tts_char:
-            print(f"🎭 TTS using Claude-generated voice for {who}")
+        print(f"🔊 TTS instruction for {who}: {instruction[:120]}...")
         def _call():
             resp = self.openai_client.audio.speech.create(
                 model=TTS_MODEL, voice=voice, input=text,
