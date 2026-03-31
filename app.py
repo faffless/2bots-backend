@@ -106,6 +106,7 @@ SESSION_TTL = 1800  # 30 minutes
 PREFETCH_CACHE: Dict[str, Dict[str, Any]] = {}
 RESEARCH_PREFETCH: Dict[str, Dict[str, Any]] = {}
 PREFETCH_GENERATION: Dict[str, int] = {}  # bumped on any invalidation; prefetch discards if stale
+TTS_CHARACTER_CACHE: Dict[str, Dict[str, str]] = {}  # sid -> {"gpt": "...", "claude": "..."}
 
 
 @app.on_event("startup")
@@ -122,7 +123,10 @@ def get_engine(sid: str) -> TwoBotsEngine:
     if not data:
         raise HTTPException(status_code=404, detail="Session not found")
     SESSION_LAST_ACTIVE[sid] = time.time()
-    return TwoBotsEngine.from_state(data)
+    engine = TwoBotsEngine.from_state(data)
+    # Inject cached TTS character descriptions so generate_tts_bytes can use them
+    engine._tts_char_cache = TTS_CHARACTER_CACHE.get(sid, {})
+    return engine
 
 
 def cleanup_stale_sessions():
@@ -135,12 +139,14 @@ def cleanup_stale_sessions():
         PREFETCH_CACHE.pop(sid, None)
         RESEARCH_PREFETCH.pop(sid, None)
         PREFETCH_GENERATION.pop(sid, None)
+        TTS_CHARACTER_CACHE.pop(sid, None)
     if stale:
         log("cleanup", f"Purged {len(stale)} stale sessions. Active: {len(SESSIONS)}")
 
 
 def save(sid: str, engine: TwoBotsEngine) -> None:
     SESSIONS[sid] = engine.export_state()
+
 
 
 def save_messages_only(sid: str, engine: TwoBotsEngine) -> None:
@@ -310,7 +316,7 @@ async def _stream_batch(engine: TwoBotsEngine, batch: list, who_generated: str, 
         claude_voice = engine.get_claude_voice()
         async def _gen_tts(msg):
             voice = gpt_voice if msg["speaker"] == "gpt" else claude_voice
-            return await engine.generate_tts_bytes(msg["text"], voice, msg["speaker"])
+            return await engine.generate_tts_bytes(msg["text"], voice, msg["speaker"], )
         batch_audio = await asyncio.gather(*[_gen_tts(m) for m in batch])
         t_tts = time.time()
         log("autopilot", f"TTS generated fresh in {t_tts-t0:.1f}s for {len(batch)} msgs")
@@ -333,7 +339,7 @@ async def _stream_batch(engine: TwoBotsEngine, batch: list, who_generated: str, 
             pf_claude_voice = pf_engine.get_claude_voice()
             async def _pf_tts(msg):
                 voice = pf_gpt_voice if msg["speaker"] == "gpt" else pf_claude_voice
-                return await pf_engine.generate_tts_bytes(msg["text"], voice, msg["speaker"])
+                return await pf_engine.generate_tts_bytes(msg["text"], voice, msg["speaker"], )
             pf_audio = await asyncio.gather(*[_pf_tts(m) for m in pf_batch])
             # Final check before storing — settings may have changed during TTS
             if PREFETCH_GENERATION.get(sid, 0) != gen_at_start:
@@ -961,6 +967,44 @@ async def update_settings(request: Request, req: SettingsUpdate):
         log("settings", f"Clearing prefetch cache for {req.session_id[:8]}...")
         PREFETCH_CACHE.pop(req.session_id, None)
     RESEARCH_PREFETCH.pop(req.session_id, None)
+
+    # Regenerate TTS character descriptions if personality-related settings changed
+    personality_keys = {"gpt_personality", "claude_personality", "gpt_quirks", "claude_quirks",
+                        "gpt_custom", "claude_custom", "gpt_personality_strength", "claude_personality_strength",
+                        "gpt_quirk_strength", "claude_quirk_strength"}
+    changed_personality = set(changed.keys()) & personality_keys
+    if changed_personality:
+        sid = req.session_id
+        # Figure out which bots need new TTS descriptions
+        bots_to_update = set()
+        for k in changed_personality:
+            bots_to_update.add("gpt" if k.startswith("gpt") else "claude")
+        gen_at = PREFETCH_GENERATION.get(sid, 0)
+        async def _gen_tts_chars():
+            try:
+                eng = get_engine(sid)
+                for bot in bots_to_update:
+                    char_desc = eng.get_character_description(bot)
+                    if not char_desc.strip():
+                        # No character set — clear any cached TTS description
+                        if sid in TTS_CHARACTER_CACHE and bot in TTS_CHARACTER_CACHE[sid]:
+                            del TTS_CHARACTER_CACHE[sid][bot]
+                        continue
+                    if PREFETCH_GENERATION.get(sid, 0) != gen_at:
+                        log("tts_char", f"Discarding stale TTS character gen for {sid[:8]}...")
+                        return
+                    tts_desc = await asyncio.to_thread(eng.generate_tts_character_description, char_desc)
+                    if PREFETCH_GENERATION.get(sid, 0) != gen_at:
+                        log("tts_char", f"Discarding stale TTS character gen for {sid[:8]}...")
+                        return
+                    if sid not in TTS_CHARACTER_CACHE:
+                        TTS_CHARACTER_CACHE[sid] = {}
+                    TTS_CHARACTER_CACHE[sid][bot] = tts_desc
+                    log("tts_char", f"Generated TTS character for {bot} in {sid[:8]}...: {tts_desc[:80]}...")
+            except Exception as e:
+                log("tts_char", f"TTS character generation failed: {e}")
+        asyncio.create_task(_gen_tts_chars())
+
     return {"ok": True}
 
 

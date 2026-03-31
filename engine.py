@@ -338,13 +338,12 @@ class TwoBotsEngine:
         except (TypeError, ValueError):
             return 1.0
 
-    def _build_tts_instruction(self, who: str) -> str:
-        """Build a voice instruction from the bot's full character description."""
+    def get_character_description(self, who: str) -> str:
+        """Gather all character parts (personality, quirks, custom, agreeableness) into one string."""
         prefix = who
         parts = []
         strength_idx = int(self._s(f"{prefix}_personality_strength") or 1)
 
-        # Personality preset
         p_key = self._s(f"{prefix}_personality") or "default"
         if p_key != "default":
             p_data = PERSONALITIES.get(p_key, PERSONALITIES["default"])
@@ -352,7 +351,6 @@ class TwoBotsEngine:
             if p_text:
                 parts.append(p_text)
 
-        # Quirks
         quirks = self._s(f"{prefix}_quirks") or []
         for q in quirks:
             if q in CHARACTER_QUIRKS:
@@ -361,29 +359,62 @@ class TwoBotsEngine:
                 if q_text:
                     parts.append(q_text)
 
-        # Custom personality
         custom = self._s(f"{prefix}_custom") or ""
         if custom.strip():
             parts.append(custom.strip())
 
-        # Agreeableness
         a = self.state.personality
         if a < 0.2:
-            parts.append("Warm and supportive tone")
+            parts.append("Warm and supportive")
         elif a < 0.4:
-            parts.append("Generally friendly tone")
+            parts.append("Generally friendly")
         elif a >= 0.8:
-            parts.append("Combative, challenging tone")
+            parts.append("Combative, challenging")
         elif a >= 0.6:
-            parts.append("Slightly confrontational tone")
+            parts.append("Slightly confrontational")
 
-        if parts:
-            return f"{TTS_BASE_INSTRUCTION} Your character: {'. '.join(parts)}."
+        return ". ".join(parts) if parts else ""
+
+    def generate_tts_character_description(self, character_desc: str) -> str:
+        """Ask Claude Haiku to generate a TTS voice description for a character."""
+        prompt = f"""Describe how a text-to-speech voice should sound for this character:
+"{character_desc}"
+
+Fill out ONLY these fields, keep each to one sentence:
+Identity:
+Affect:
+Tone:
+Emotion:
+Pauses:
+Pronunciation:
+
+Return ONLY the six fields, nothing else."""
+
+        resp = self.claude_client.messages.create(
+            model="claude-3-5-haiku-latest",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = resp.content[0].text if resp.content else ""
+        print(f"\n🎭 TTS CHARACTER DESCRIPTION:\nInput: {character_desc}\nOutput: {result}\n")
+        return result.strip()
+
+    def _build_tts_instruction(self, who: str, cached_tts_char: str = "") -> str:
+        """Build a voice instruction. Uses Claude-generated description if cached, else falls back."""
+        # If we have a Claude-generated TTS character description, use it
+        if cached_tts_char:
+            return f"{TTS_BASE_INSTRUCTION}\n{cached_tts_char}"
+
+        # Fallback: build from raw character parts
+        char_desc = self.get_character_description(who)
+        if char_desc:
+            return f"{TTS_BASE_INSTRUCTION} Your character: {char_desc}."
         return TTS_BASE_INSTRUCTION
 
     async def generate_tts_bytes(self, text: str, voice: str, who: str = "gpt") -> bytes:
         speed = self.get_tts_speed(who)
-        instruction = self._build_tts_instruction(who)
+        cached_tts_char = getattr(self, '_tts_char_cache', {}).get(who, "")
+        instruction = self._build_tts_instruction(who, cached_tts_char)
         def _call():
             resp = self.openai_client.audio.speech.create(
                 model=TTS_MODEL, voice=voice, input=text,
