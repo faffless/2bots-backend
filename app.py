@@ -299,6 +299,11 @@ async def _stream_batch(engine: TwoBotsEngine, batch: list, who_generated: str, 
             log("prefetch", f"Prefetch failed: {e}")
     asyncio.create_task(_do_prefetch())
 
+    # If Mix/Random mode picked a format, tell the frontend
+    if engine.state.last_mix_pick:
+        picked_label = MODES.get(engine.state.last_mix_pick, {}).get("label", engine.state.last_mix_pick)
+        yield sse({"type": "mix_format", "format": picked_label})
+
     # Stream all text+audio pairs (TTS already ready — zero gap)
     for msg, audio in zip(batch, batch_audio):
         yield sse({"type": "text", "speaker": msg["speaker"], "text": msg["text"]})
@@ -471,6 +476,10 @@ async def start_stream(request: Request, req: StartRequest):
             log("start", f"Scripted buffer ready in {t1-t0:.1f}s — streaming opener + {len(batch)} msgs")
 
             # 5. Stream everything: opener then batch
+            if engine.state.last_mix_pick:
+                picked_label = MODES.get(engine.state.last_mix_pick, {}).get("label", engine.state.last_mix_pick)
+                yield sse({"type": "mix_format", "format": picked_label})
+
             yield sse({"type": "text", "speaker": opener_who, "text": opener_text})
             yield sse({
                 "type": "audio", "speaker": opener_who,

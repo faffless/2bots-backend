@@ -492,10 +492,7 @@ AGREEABLENESS_LEGACY = {
 #  SCRIPTED MODE — Autopilot Batch (one AI writes both sides)
 # =============================================================================
 
-SCRIPTED_BATCH_SYSTEM = "You are an extremely talented {role_name}. Return ONLY valid JSON arrays."
-
-SCRIPTED_BATCH_PROMPT = """[ROLE]
-You are an extremely talented {role_name}.
+SCRIPTED_BATCH_SYSTEM = """You are an extremely talented {role_name}. Return ONLY valid JSON arrays.
 
 [SETTING]
 {mode_prompt}
@@ -505,9 +502,9 @@ You are an extremely talented {role_name}.
 [CHARACTERS]
 "G" is {gpt_character_line}.
 "C" is {claude_character_line}.
-If addressing the user, say "you".
+If addressing the user, say "you"."""
 
-[INSTRUCTIONS]
+SCRIPTED_BATCH_PROMPT = """[INSTRUCTIONS]
 {first_speaker_instruction}{user_instruction}{context_instruction}
 
 WRITE THE NEXT {num_messages} LINES OF SPONTANEOUS {interaction_type}.
@@ -529,25 +526,8 @@ SCRIPTED_CONTEXT_FIRST_BATCH = (
     'what you\'re doing.'
 )
 
-SCRIPTED_CONTEXT_FORMAT_AND_TOPIC_CHANGED = (
-    '\nThe format just changed to {format_label} and the topic changed to '
-    '{topic_display}. Acknowledge this shift naturally in your first couple of lines.'
-)
-
-SCRIPTED_CONTEXT_FORMAT_CHANGED = (
-    '\nThe format just changed to {format_label}. Acknowledge this shift '
-    'naturally in your first couple of lines.'
-)
-
-SCRIPTED_CONTEXT_TOPIC_CHANGED = (
-    '\nThe topic just changed to {topic_display}. Acknowledge this shift '
-    'naturally in your first couple of lines.'
-)
-
 SCRIPTED_CONTEXT_CONTINUATION = (
-    '\nThis is a CONTINUATION. The audience just heard everything in the conversation history. '
-    'DO NOT repeat, rephrase, or revisit topics/jokes/points already covered. '
-    'Move to fresh territory — new angles, deeper layers, surprising tangents, or escalation. '
+    '\nThis is a CONTINUATION. Don\'t repeat or rephrase anything from the conversation history. '
     'The conversation must evolve and feel like it\'s going somewhere new.'
 )
 
@@ -662,6 +642,11 @@ The listener has chosen the topic and character settings. You are expected to st
 Do not break character. Do not prefix your response with your name or any label. Respond naturally and concisely as {bot_name}. Do not write {other_name}'s lines. No markdown, no lists, no headers.{character_line}{agree_section}"""
 
 PINGPONG_CONVERSATION_PROMPT = """{recent_text}{word_limit_instruction}"""
+
+PINGPONG_OPENER_CONVERSATION = """You are {bot_name}. You and {other_name} (another AI) are about to have a conversation{topic_line} while a human listens on an app called 2bots.ai.
+
+In under 60 words: greet {other_name}, announce what you'll be chatting about, and invite them to jump in. Keep it natural and enthusiastic — like two people starting a chat. If no specific topic was given, pick something fun and announce it.{character_line}{agree_section}
+Do not prefix your response with your name or any label. No markdown, no lists, no headers."""
 
 # =============================================================================
 #  PING-PONG MODE — Openers (first message, includes [PLAN:] line)

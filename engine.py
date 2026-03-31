@@ -25,13 +25,13 @@ from prompts import (
     PERSONALITIES, CHARACTER_QUIRKS,
     AGREEABLENESS_BATCH, AGREEABLENESS_LEGACY,
     SCRIPTED_BATCH_SYSTEM, SCRIPTED_BATCH_PROMPT,
-    SCRIPTED_CONTEXT_FIRST_BATCH, SCRIPTED_CONTEXT_FORMAT_AND_TOPIC_CHANGED,
-    SCRIPTED_CONTEXT_FORMAT_CHANGED, SCRIPTED_CONTEXT_TOPIC_CHANGED,
+    SCRIPTED_CONTEXT_FIRST_BATCH,
     SCRIPTED_CONTEXT_CONTINUATION, SCRIPTED_RANDOM_TOPIC_IMMERSIVE,
     SCRIPTED_OPENER_SYSTEM, SCRIPTED_OPENER_PROMPT, SCRIPTED_OPENER_DESCRIPTIONS,
     BRIDGE_SYSTEM, BRIDGE_PROMPT,
     SINGLE_BOT_SYSTEM, SINGLE_BOT_PROMPT,
     PINGPONG_CONVERSATION_PROMPT, PINGPONG_CONVERSATION_SYSTEM,
+    PINGPONG_OPENER_CONVERSATION,
     PINGPONG_OPENER_DEBATE, PINGPONG_OPENER_ADVICE,
     PINGPONG_OPENER_HELP_ME_DECIDE, PINGPONG_OPENER_RESEARCH,
     PINGPONG_ONGOING_DEBATE, PINGPONG_ONGOING_ADVICE,
@@ -204,6 +204,7 @@ class ConversationState:
     autopilot_batch_count: int = 0
     prev_format: Optional[str] = None
     prev_topic: Optional[str] = None
+    last_mix_pick: Optional[str] = None
     # ---- PING-PONG MODE (research, debate, advice) ----
     pingpong_msg_count: int = 0
     pingpong_reviews: List[str] = field(default_factory=list)
@@ -485,6 +486,9 @@ class TwoBotsEngine:
         if mode_key in ("random", "mix"):
             mode_key = random.choice(real_modes)
             print(f"🎲 {'Mix' if self._s('mode') == 'mix' else 'Random'} → picked: {mode_key}")
+            self.state.last_mix_pick = mode_key
+        else:
+            self.state.last_mix_pick = None
         mode_data = MODES.get(mode_key, MODES["conversation"])
 
         # Topic
@@ -608,30 +612,20 @@ class TwoBotsEngine:
         format_label = mode_data.get("label", mode_key.replace("_", " ").title())
         topic_display = topic if topic.lower() != "random" else "a random topic"
 
-        if self.state.autopilot_batch_count == 1:
-            # First batch — announce the format and topic
+        format_changed = (self.state.prev_format is not None and self.state.prev_format != mode_key)
+        topic_changed = (self.state.prev_topic is not None and self.state.prev_topic != topic)
+
+        if self.state.autopilot_batch_count == 1 or format_changed or topic_changed:
+            # First batch or format/topic changed — fresh start
+            if format_changed or topic_changed:
+                self.state.gpt_msgs.clear()
+                self.state.claude_msgs.clear()
+                print(f"🔄 Reset — format: {self.state.prev_format} -> {mode_key}, topic: {self.state.prev_topic} -> {topic}")
             context_instruction = SCRIPTED_CONTEXT_FIRST_BATCH.format(
                 format_label=format_label.lower(), topic_display=topic_display)
             print(f"🎬 First batch — announcing format: {format_label}, topic: {topic_display}")
         else:
-            # Check if format or topic changed since last batch
-            format_changed = (self.state.prev_format is not None and self.state.prev_format != mode_key)
-            topic_changed = (self.state.prev_topic is not None and self.state.prev_topic != topic)
-            if format_changed and topic_changed:
-                context_instruction = SCRIPTED_CONTEXT_FORMAT_AND_TOPIC_CHANGED.format(
-                    format_label=format_label.lower(), topic_display=topic_display)
-                print(f"🔄 Format changed: {self.state.prev_format} → {mode_key}, Topic changed: {self.state.prev_topic} → {topic}")
-            elif format_changed:
-                context_instruction = SCRIPTED_CONTEXT_FORMAT_CHANGED.format(
-                    format_label=format_label.lower())
-                print(f"🔄 Format changed: {self.state.prev_format} → {mode_key}")
-            elif topic_changed:
-                context_instruction = SCRIPTED_CONTEXT_TOPIC_CHANGED.format(
-                    topic_display=topic_display)
-                print(f"🔄 Topic changed: {self.state.prev_topic} → {topic}")
-            else:
-                # Continuing same format/topic — push for fresh territory
-                context_instruction = SCRIPTED_CONTEXT_CONTINUATION
+            context_instruction = SCRIPTED_CONTEXT_CONTINUATION
 
         # Update tracked format/topic for next batch comparison
         self.state.prev_format = mode_key
@@ -659,12 +653,6 @@ class TwoBotsEngine:
         gpt_character_line = f"{gpt_strength_word} {gpt_traits}".strip() if gpt_strength_word else gpt_traits
         claude_character_line = f"{claude_strength_word} {claude_traits}".strip() if claude_strength_word else claude_traits
         prompt = SCRIPTED_BATCH_PROMPT.format(
-            role_name=role_name.lower(),
-            mode_prompt=mode_data['prompt'],
-            topic_line=topic_line,
-            agree_section=agree_section,
-            gpt_character_line=gpt_character_line,
-            claude_character_line=claude_character_line,
             first_speaker_instruction=first_speaker_instruction,
             user_instruction=user_instruction,
             context_instruction=context_instruction,
@@ -682,7 +670,14 @@ class TwoBotsEngine:
 
         # ---- Make the API call ----
         try:
-            system_msg = SCRIPTED_BATCH_SYSTEM.format(role_name=role_name.lower())
+            system_msg = SCRIPTED_BATCH_SYSTEM.format(
+                role_name=role_name.lower(),
+                mode_prompt=mode_data['prompt'],
+                topic_line=topic_line,
+                agree_section=agree_section,
+                gpt_character_line=gpt_character_line,
+                claude_character_line=claude_character_line,
+            )
             if who_generates == "claude":
                 resp = self.claude_client.messages.create(
                     model=CLAUDE_MODEL,
@@ -1230,8 +1225,12 @@ class TwoBotsEngine:
 
         if mode == "conversation":
             topic_line = f' about "{topic}"' if topic != "whatever you find most interesting" else ""
-            prompt = PINGPONG_CONVERSATION_PROMPT.format(topic_line=topic_line, **fmt_vars)
-            system_msg = PINGPONG_CONVERSATION_SYSTEM.format(**fmt_vars)
+            if is_opener:
+                prompt = PINGPONG_OPENER_CONVERSATION.format(topic_line=topic_line, **fmt_vars)
+                system_msg = PINGPONG_CONVERSATION_SYSTEM.format(**fmt_vars)
+            else:
+                prompt = PINGPONG_CONVERSATION_PROMPT.format(topic_line=topic_line, **fmt_vars)
+                system_msg = PINGPONG_CONVERSATION_SYSTEM.format(**fmt_vars)
         elif mode == "debate":
             if is_opener:
                 prompt = PINGPONG_OPENER_DEBATE.format(**fmt_vars)
@@ -1268,9 +1267,8 @@ class TwoBotsEngine:
         print(prompt)
         print(f"{'='*60}\n")
 
-        # Openers: ~80 words + [PLAN:] line = ~120 tokens, give headroom
-        # Non-conversation, non-opener responses stay at 200
-        if is_opener and mode != "conversation":
+        # Openers get 250 tokens for headroom, ongoing responses stay at 200
+        if is_opener:
             use_max_tokens = 250
         else:
             use_max_tokens = 200
