@@ -1242,18 +1242,24 @@ class TwoBotsEngine:
             conclusions_section = f"\n{header}\n" + "\n".join(conclusion_lines) + "\n"
 
         # Only use last 9 messages for context (conclusions carry the full journey)
-        recent_msgs = self.state.gpt_msgs[-9:] if self.state.gpt_msgs else []
+        # Use the correct message list so each bot sees its own messages as "assistant"
+        if who == "gpt":
+            recent_msgs = self.state.gpt_msgs[-9:] if self.state.gpt_msgs else []
+        else:
+            recent_msgs = self.state.claude_msgs[-9:] if self.state.claude_msgs else []
+
+        # Build text version for prompt templates that embed history
         recent_lines = []
         for m in recent_msgs:
             content = m["content"]
             if m["role"] == "assistant":
-                recent_lines.append(f"ChatGPT: {content}")
-            elif "[Claude]" in content:
-                recent_lines.append(f"Claude: {content.replace('[Claude]: ', '')}")
+                recent_lines.append(f"{bot_name}: {content}")
+            elif f"[{other_name}]" in content:
+                recent_lines.append(f"{other_name}: {content.replace(f'[{other_name}]: ', '')}")
             elif "[User]" in content:
                 recent_lines.append(f"User: {content.replace('[User]: ', '')}")
             else:
-                recent_lines.append(f"ChatGPT: {content}")
+                recent_lines.append(f"{bot_name}: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
         # Word limit — randomized per response for natural rhythm
@@ -1347,12 +1353,30 @@ class TwoBotsEngine:
         else:
             use_max_tokens = 200
 
+        # Build proper message history so each bot sees its own messages as "assistant" role
+        if is_opener:
+            api_messages = [{"role": "user", "content": prompt}]
+        else:
+            # Use native role-tagged messages + append prompt as final user message
+            history_window = recent_msgs[:]  # already sliced to last 9
+            if who == "claude":
+                history_window = self._fix_claude_messages(history_window)
+            # Append the prompt (word limit, etc.) to the last user message or add new one
+            if history_window and history_window[-1]["role"] == "user":
+                history_window[-1] = {
+                    "role": "user",
+                    "content": history_window[-1]["content"] + "\n" + prompt,
+                }
+            else:
+                history_window.append({"role": "user", "content": prompt})
+            api_messages = history_window
+
         try:
             if who == "claude":
                 claude_kwargs = dict(
                     model=CLAUDE_MODEL,
                     system=system_msg,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=api_messages,
                 )
                 if use_max_tokens is not None:
                     claude_kwargs["max_tokens"] = use_max_tokens
@@ -1365,7 +1389,7 @@ class TwoBotsEngine:
                     model=GPT_MODEL,
                     messages=[
                         {"role": "system", "content": system_msg},
-                        {"role": "user", "content": prompt},
+                        *api_messages,
                     ],
                 )
                 if use_max_tokens is not None:
@@ -1410,18 +1434,21 @@ class TwoBotsEngine:
             conclusion_lines = [f"{i+1}. {c}" for i, c in enumerate(self.state.pingpong_conclusions)]
             conclusions_section = f"\n{header}\n" + "\n".join(conclusion_lines) + "\n"
 
-        recent_msgs = self.state.gpt_msgs[-7:] if self.state.gpt_msgs else []
+        if who == "gpt":
+            recent_msgs = self.state.gpt_msgs[-7:] if self.state.gpt_msgs else []
+        else:
+            recent_msgs = self.state.claude_msgs[-7:] if self.state.claude_msgs else []
         recent_lines = []
         for m in recent_msgs:
             content = m["content"]
             if m["role"] == "assistant":
-                recent_lines.append(f"ChatGPT: {content}")
-            elif "[Claude]" in content:
-                recent_lines.append(f"Claude: {content.replace('[Claude]: ', '')}")
+                recent_lines.append(f"{bot_name}: {content}")
+            elif f"[{other_name}]" in content:
+                recent_lines.append(f"{other_name}: {content.replace(f'[{other_name}]: ', '')}")
             elif "[User]" in content:
                 recent_lines.append(f"User: {content.replace('[User]: ', '')}")
             else:
-                recent_lines.append(f"ChatGPT: {content}")
+                recent_lines.append(f"{bot_name}: {content}")
         recent_text = "\n".join(recent_lines) if recent_lines else "(No conversation yet)"
 
         # Mode-specific review prompts — first person, with milestone context

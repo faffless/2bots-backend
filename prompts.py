@@ -670,7 +670,7 @@ The listener has chosen the topic and character settings. You are expected to st
 
 Do not break character. Do not prefix your response with your name or any label. Respond naturally and concisely as {bot_name}. Do not write {other_name}'s lines. No markdown, no lists, no headers.{character_line}{agree_section}"""
 
-PINGPONG_CONVERSATION_PROMPT = """{recent_text}{word_limit_instruction}"""
+PINGPONG_CONVERSATION_PROMPT = """Respond naturally as {bot_name}. Continue the conversation.{word_limit_instruction}"""
 
 PINGPONG_OPENER_CONVERSATION = """You are {bot_name}. You and {other_name} (another AI) are about to have a conversation{topic_line} while a human listens on an app called 2bots.ai.
 
@@ -718,53 +718,25 @@ No markdown, no lists, no headers."""
 #  PING-PONG MODE — Ongoing responses (after opener)
 # =============================================================================
 
-PINGPONG_ONGOING_DEBATE = """[ROLE]
-You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
-You are both aware you are AIs having a genuine debate on this topic.
+PINGPONG_ONGOING_DEBATE = """You are {bot_name}, debating "{topic}" against {other_name} (another AI) while a human listens.
 {character_line}{agree_section}
 {conclusions_section}
+{word_limit_line} Do not prefix your response with your name or any label. Respond to the conversation above."""
 
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
-
-PINGPONG_ONGOING_ADVICE = """[ROLE]
-You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
-You are both aware you are AIs working together to give the best possible advice on this topic.
+PINGPONG_ONGOING_ADVICE = """You are {bot_name}, advising on "{topic}" with {other_name} (another AI) while a human listens.
 Add one practical, specific insight that builds on or challenges the latest message. Focus on actionable guidance, not abstract principles.{character_line}{agree_section}
 {conclusions_section}
+{word_limit_line} Do not prefix your response with your name or any label. Respond to the conversation above."""
 
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
-
-PINGPONG_ONGOING_HELP_ME_DECIDE = """[ROLE]
-You are {bot_name}, helping a listener decide about "{topic}" with {other_name} (another AI) while a human listens.
-You are both aware you are AIs helping someone think through a real decision or dilemma.
+PINGPONG_ONGOING_HELP_ME_DECIDE = """You are {bot_name}, helping a listener decide about "{topic}" with {other_name} (another AI) while a human listens.
 Add one new angle, trade-off, or consideration that directly responds to the latest message. Challenge assumptions, explore consequences, or highlight what's being overlooked. Be practical and specific.{character_line}{agree_section}
 {conclusions_section}
+{word_limit_line} Do not prefix your response with your name or any label. Respond to the conversation above."""
 
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
-
-PINGPONG_ONGOING_RESEARCH = """[ROLE]
-You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
-You are both aware you are AIs trying to make genuine progress on this topic together.
+PINGPONG_ONGOING_RESEARCH = """You are {bot_name}, an AI researching "{topic}" with {other_name} (another AI) while a human listens.
 Add only one new, relevant contribution that directly engages the latest message. No repetition, no paraphrase, no filler, no summary. Each reply must either introduce new information, challenge an assumption, expose a weakness, or ask the next high-value question.{character_line}{agree_section}
 {conclusions_section}
-
-[RECENT CONVERSATION]
-{recent_text}
-
-[INSTRUCTIONS]
-{word_limit_line} Do not prefix your response with your name or any label."""
+{word_limit_line} Do not prefix your response with your name or any label. Respond to the conversation above."""
 
 # System messages for ongoing ping-pong (one-liners)
 PINGPONG_SYSTEM = {
