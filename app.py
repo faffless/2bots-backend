@@ -1022,46 +1022,40 @@ def delete_session(session_id: str):
 
 
 @app.get("/test/tts")
-async def test_tts():
-    """Raw TTS test — bypass everything. Three samples: plain, pirate, mouse."""
+async def test_tts(request: Request):
+    """Raw TTS test — try every voice with pirate instructions."""
     import base64
     from openai import OpenAI
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     text = "Well I think that's a really interesting point, and I have to say I completely disagree with you on this one."
+    pirate = "Speak as a gruff, fat pirate captain with a heavy Spanish accent. Deep gravelly voice, slur your words, roll your R's. Say 'arrr' occasionally."
 
-    # Call 1: Plain, no instructions
-    resp1 = client.audio.speech.create(
-        model="gpt-4o-mini-tts", voice="onyx", input=text,
-        response_format="mp3",
-    )
-    audio1 = base64.b64encode(resp1.content).decode()
+    voices = ["ash", "coral", "sage", "onyx", "nova", "shimmer", "fable", "alloy", "echo", "ballad"]
+    sections = []
+    for v in voices:
+        # Plain
+        r1 = client.audio.speech.create(
+            model="gpt-4o-mini-tts", voice=v, input=text, response_format="mp3",
+        )
+        a1 = base64.b64encode(r1.content).decode()
+        # With pirate instructions
+        r2 = client.audio.speech.create(
+            model="gpt-4o-mini-tts", voice=v, input=text, instructions=pirate, response_format="mp3",
+        )
+        a2 = base64.b64encode(r2.content).decode()
+        sections.append(f"""
+<h3>{v.title()}</h3>
+<p>Plain: <audio controls src="data:audio/mpeg;base64,{a1}"></audio></p>
+<p>Pirate: <audio controls src="data:audio/mpeg;base64,{a2}"></audio></p>
+""")
 
-    # Call 2: With pirate instructions
-    resp2 = client.audio.speech.create(
-        model="gpt-4o-mini-tts", voice="onyx", input=text,
-        instructions="Speak as a gruff, fat pirate captain with a heavy Spanish accent. Deep gravelly voice, slur your words, roll your R's.",
-        response_format="mp3",
-    )
-    audio2 = base64.b64encode(resp2.content).decode()
-
-    # Call 3: Stage direction in text
-    resp3 = client.audio.speech.create(
-        model="gpt-4o-mini-tts", voice="onyx",
-        input=f"(spoken as a terrified, meek little mouse with a British accent, squeaky and trembling) {text}",
-        response_format="mp3",
-    )
-    audio3 = base64.b64encode(resp3.content).decode()
-
-    return HTMLResponse(f"""<html><body style="font-family:sans-serif;max-width:600px;margin:40px auto">
-<h2>TTS Test — Same text, different instructions</h2>
-<h3>1. Plain (no instructions)</h3>
-<audio controls src="data:audio/mpeg;base64,{audio1}"></audio>
-<h3>2. Pirate instructions (via instructions param)</h3>
-<audio controls src="data:audio/mpeg;base64,{audio2}"></audio>
-<h3>3. Mouse stage direction (in input text)</h3>
-<audio controls src="data:audio/mpeg;base64,{audio3}"></audio>
+    html = f"""<html><body style="font-family:sans-serif;max-width:700px;margin:40px auto">
+<h2>TTS Voice Comparison — Plain vs Pirate</h2>
 <p><b>Text:</b> {text}</p>
-</body></html>""")
+<p><b>Instruction:</b> {pirate}</p>
+{''.join(sections)}
+</body></html>"""
+    return HTMLResponse(html)
 
 
 if __name__ == "__main__":
