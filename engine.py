@@ -414,7 +414,9 @@ Return ONLY the six fields, nothing else."""
     async def generate_tts_bytes(self, text: str, voice: str, who: str = "gpt") -> bytes:
         speed = self.get_tts_speed(who)
         # _tts_char_cache is a live reference to TTS_CHARACTER_CACHE[sid] dict, set by app.py
-        cached_tts_char = getattr(self, '_tts_char_cache', {}).get(who, "")
+        raw_cache = getattr(self, '_tts_char_cache', {})
+        print(f"🔍 TTS CACHE DEBUG for {who}: has_attr={hasattr(self, '_tts_char_cache')}, cache_id={id(raw_cache)}, keys={list(raw_cache.keys())}, val_len={len(raw_cache.get(who, ''))}")
+        cached_tts_char = raw_cache.get(who, "")
         instruction = self._build_tts_instruction(who, cached_tts_char)
         print(f"🔊 TTS instruction for {who}: {instruction[:120]}...")
         def _call():
