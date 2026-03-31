@@ -19,6 +19,8 @@ import openai
 import openai.resources.audio
 import openai.resources.chat
 
+print(f"🔧 ENGINE INIT: OpenAI SDK version = {openai.__version__}", flush=True)
+
 import tuning
 from prompts import (
     TTS_MODEL, TTS_BASE_INSTRUCTION,
@@ -428,23 +430,26 @@ Return ONLY the six fields, nothing else."""
             tts_input = f"[Voice: {char_desc}] {text}"
             print(f"   🎬 Stage direction in text: [Voice: {char_desc}]")
         def _call():
-            import openai as _oai
-            print(f"   📦 OpenAI SDK version: {_oai.__version__}")
-            kwargs = dict(
-                model=TTS_MODEL, voice=voice, input=tts_input,
-                instructions=instruction,
-                response_format="mp3", speed=speed,
-            )
-            print(f"   📨 TTS API kwargs: model={kwargs['model']}, voice={kwargs['voice']}, speed={kwargs['speed']}")
-            print(f"   📨 input ({len(kwargs['input'])} chars): {kwargs['input'][:150]}...")
-            print(f"   📨 instructions ({len(kwargs['instructions'])} chars): {kwargs['instructions'][:150]}...")
+            import sys
+            print(f"   📦 OpenAI SDK version: {openai.__version__}", flush=True)
+            print(f"   📨 input ({len(tts_input)} chars): {tts_input[:200]}...", flush=True)
+            print(f"   📨 instructions ({len(instruction)} chars): {instruction[:200]}...", flush=True)
             try:
-                resp = self.openai_client.audio.speech.create(**kwargs)
-                print(f"   ✅ TTS API call succeeded, got {len(resp.content)} bytes")
+                resp = self.openai_client.audio.speech.create(
+                    model=TTS_MODEL, voice=voice, input=tts_input,
+                    instructions=instruction,
+                    response_format="mp3", speed=speed,
+                )
+                print(f"   ✅ TTS API call succeeded, {len(resp.content)} bytes", flush=True)
                 return resp.content
             except TypeError as e:
-                print(f"   ⚠️ TypeError with instructions param: {e}")
-                print(f"   ⚠️ FALLING BACK without instructions param")
+                print(f"   ⚠️ TypeError: {e} — instructions param NOT SUPPORTED by this SDK!", flush=True)
+                resp = self.openai_client.audio.speech.create(
+                    model=TTS_MODEL, voice=voice, input=tts_input,
+                    response_format="mp3", speed=speed,
+                )
+                print(f"   ✅ Fallback TTS succeeded (no instructions), {len(resp.content)} bytes", flush=True)
+                return resp.content
                 del kwargs["instructions"]
                 resp = self.openai_client.audio.speech.create(**kwargs)
                 return resp.content
