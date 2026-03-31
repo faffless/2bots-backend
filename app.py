@@ -1023,9 +1023,7 @@ def delete_session(session_id: str):
 
 @app.get("/test/tts")
 async def test_tts():
-    """Raw TTS test — no engine, no cache. Just OpenAI API directly.
-    Returns two audio files: one plain, one with pirate instructions.
-    Visit /test/tts in browser to hear the difference."""
+    """Raw TTS test — bypass everything. Three samples: plain, pirate, mouse."""
     import base64
     from openai import OpenAI
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
